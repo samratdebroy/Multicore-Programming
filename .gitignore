@@ -1,0 +1,8 @@
+*.suo
+GalaxySimulator_Threaded_COMP426/COMP426_Assignment1/Debug/
+GalaxySimulator_Threaded_COMP426/Debug/COMP426_Assignment1.exe
+GalaxySimulator_Threaded_COMP426/.vs/COMP426_Assignment1/v15/ipch/AutoPCH/58a15a3eba97d09c/PARTICLE.ipch
+GalaxySimulator_Threaded_COMP426/.vs/COMP426_Assignment1/v15/ipch/
+*.aps
+*.db
+*.user
