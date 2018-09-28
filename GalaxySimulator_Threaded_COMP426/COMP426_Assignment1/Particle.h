@@ -4,19 +4,27 @@
 class Particle
 {
 private:
-	int idx;
-	float mass;
-	glm::vec3 pos;
+	int idx_;
+	float mass_;
+	// position, velocity and acceleration
+	glm::vec2 pos_;
+	glm::vec2 vel_;
+	glm::vec2 acc_;
 
 public:
 	Particle(int id = 1, float mass = 1.0f);
 	~Particle();
 
-	int getIdx() { return idx; }
-	void setIdx(int newIdx) { idx = newIdx; }
-	float getMass() { return mass; }
-	void setMass(float newMass) { mass = newMass; }
-	glm::vec3 getPos() { return pos; }
-	void setPos(glm::vec3 newPos) { pos = newPos; }
+	// Setters and Getters
+	int getIdx() { return idx_; }
+	void setIdx(int newIdx) { idx_ = newIdx; }
+	float getMass() { return mass_; }
+	void setMass(float newMass) { mass_ = newMass; }
+	glm::vec2 getPos() { return pos_; }
+	void setPos(glm::vec2 newPos) { pos_ = newPos; }
+	glm::vec2 getVel() { return vel_; }
+	void setVel(glm::vec2 newVel) { vel_ = newVel; }
+	glm::vec2 getAcc() { return acc_; }
+	void setAcc(glm::vec2 newAcc) { acc_ = newAcc; }
 };
 

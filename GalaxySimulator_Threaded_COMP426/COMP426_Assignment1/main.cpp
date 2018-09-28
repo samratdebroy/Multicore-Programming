@@ -64,10 +64,6 @@ int main()
 	glfwGetFramebufferSize(window, &width, &height);
 	framebuffer_size_callback(window, width, height); // Sets the window size
 
-	glEnable(GL_DEPTH_TEST); // enable the z-buffer and depth testing
-	glDepthFunc(GL_LESS); // re-enable the depth buffer to normal
-
-
 	// Ask user for simulation parameters
 	int numParticle = 9999;
 	double simTimeSeconds = 999;
@@ -76,13 +72,13 @@ int main()
 		cout << "Please enter the number of particles (10 to 5000) to simulate" << endl;
 		cin >> numParticle;
 	}
-
 	while (simTimeSeconds < 10 || simTimeSeconds > 500)
 	{
 		cout << "Please enter the number of seconds (10 to 500) the simulation should run" << endl;
 		cin >> simTimeSeconds;
 	}
 
+	// Load Shaders
 	Shader shader("shaders/vertex.shader", "shaders/fragment.shader");
 	shader.UseProgram();
 
@@ -97,11 +93,11 @@ int main()
 	for (unsigned int i = 0; i < numParticle; i++)
 	{
 		particles.push_back(Particle(i, 1.0f));
-		particles[i].setPos(glm::vec3(randFloat(rng), randFloat(rng), 0.0f));
+		particles[i].setPos(glm::vec2(randFloat(rng), randFloat(rng)));
 	}
 	ParticleDisplay particleDisplay(particles);
 
-	// Game loop
+	// Event loop
 	while (!glfwWindowShouldClose(window))
 	{
 		// per-frame Time logic
@@ -116,11 +112,6 @@ int main()
 		// Clear the colorbuffer
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		// View and Model matrices
-		glm::mat4 proj;
-		glm::mat4 view;
-		glm::mat4 model;
 
 		shader.UseProgram();
 		shader.setVec4("ColorIn", glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));

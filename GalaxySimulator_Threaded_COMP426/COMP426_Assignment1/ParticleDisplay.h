@@ -10,9 +10,8 @@ class ParticleDisplay
 
 private:
 	/* Render Data */
-	unsigned int VAO, VBO;
-	GLuint vertices_VBO, normals_VBO;
-	std::vector<glm::vec3> vertices;
+	unsigned int VAO_, VBO_;
+	std::vector<glm::vec2> vertices_;
 
 public:
 	ParticleDisplay(const std::vector<Particle>& particles);

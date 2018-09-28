@@ -2,9 +2,12 @@
 
 
 
-Particle::Particle(int idx, float mass) : idx(idx), mass(mass)
+Particle::Particle(int idx, float mass) : idx_(idx), mass_(mass)
 {
-	pos = glm::vec3(0.0f, 0.0f, 0.0f);
+	pos_ = glm::vec2(0.0f, 0.0f);
+	vel_ = glm::vec2(0.0f, 0.0f);
+	acc_ = glm::vec2(0.0f, 0.0f);
+
 }
 
 

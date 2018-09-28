@@ -4,11 +4,11 @@
 
 ParticleDisplay::ParticleDisplay(const std::vector<Particle>& particles)
 {
-	vertices.resize(particles.size());
+	vertices_.resize(particles.size());
 
 	// Setup Vertex Array Object and Vertex Buffer Object
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
+	glGenVertexArrays(1, &VAO_);
+	glGenBuffers(1, &VBO_);
 
 	updateParticles(particles);
 }
@@ -18,14 +18,14 @@ void ParticleDisplay::updateParticles(const std::vector<Particle>& particles)
 	// Update vertices
 	for (Particle particle : particles)
 	{
-		vertices[particle.getIdx()] = particle.getPos();
+		vertices_[particle.getIdx()] = particle.getPos();
 	}
 
 	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
-	glBindVertexArray(VAO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), &vertices.front(), GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glBindVertexArray(VAO_);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO_);
+	glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(glm::vec2), &vertices_.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
 	glEnableVertexAttribArray(0);
 
 	// Unbind buffers
@@ -40,7 +40,7 @@ ParticleDisplay::~ParticleDisplay()
 
 void ParticleDisplay::draw(GLenum drawMode)
 {
-	glBindVertexArray(VAO);
-	glDrawArrays(drawMode, 0, vertices.size());
+	glBindVertexArray(VAO_);
+	glDrawArrays(drawMode, 0, vertices_.size());
 	glBindVertexArray(0);
 }
