@@ -18,7 +18,7 @@ void ParticleDisplay::init(const std::vector<Particle>& particles)
 void ParticleDisplay::updateParticles(const std::vector<Particle>& particles, double xExtent, double yExtent)
 {
 	// Update vertices
-	for (Particle particle : particles)
+	for (const Particle& particle : particles)
 	{
 		vertices_[particle.getIdx()].x = particle.getPos().x / xExtent;
 		vertices_[particle.getIdx()].y = particle.getPos().y / yExtent;

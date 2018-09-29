@@ -4,11 +4,12 @@
 
 namespace {
 	constexpr double SIM_SIZE = 1.0e7; // Vertical and Horizontal extent of the simulation screen in units of length
-	constexpr double AVERAGE_GALAXY_RADIUS = SIM_SIZE*0.1;
-	constexpr double MIN_GALAXY_RADIUS = AVERAGE_GALAXY_RADIUS *0.01;
+	constexpr double MAX_GALAXY_RADIUS = SIM_SIZE*0.3;
+	constexpr double MIN_GALAXY_RADIUS = MAX_GALAXY_RADIUS *0.1;
 	constexpr double PARTICLE_MASS = 1.0e15;
 	constexpr double GRAVITATIONAL_CONSTANT = 6.67408e-11;
-	constexpr double THETA = 1.0;
+	constexpr double THETA = 0.5;
+	constexpr double SOFTENER = (SIM_SIZE*3.0e-5)*(SIM_SIZE * 3.0e-5);
 }
 
 ParticleSystem::ParticleSystem(unsigned int numParticles)
@@ -38,9 +39,9 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 		std::uniform_real_distribution<double> randDouble(-0.6*SIM_SIZE,0.6*SIM_SIZE);
 		auto galaxyCenter = glm::vec2(randDouble(rng), randDouble(rng));
 		
-		// Use a uniform dist to get angle
+		// Use a uniform dist to get angle and distance from center
 		std::uniform_real_distribution<double> randAngle(0, 2*3.141592653); // distribution returns angle between 0 and 2*PI rads
-		std::exponential_distribution<double> randDistFromCenter(1.0/AVERAGE_GALAXY_RADIUS);
+		std::uniform_real_distribution<double> randDistFromCenter(0.0, MAX_GALAXY_RADIUS);
 
 		// Create particles
 		galaxies_[i].particles.reserve(galaxySize);
@@ -124,10 +125,11 @@ void ParticleSystem::integrate(double dt)
 	{
 		for (auto& particle : galaxy.particles)
 		{
-			const auto& vel = particle.getVel();
-			particle.setPos(particle.getPos() + glm::vec2(vel.x*dt, vel.y*dt));
 			const auto& acc = particle.getAcc();
 			particle.setVel(particle.getVel() + glm::vec2(acc.x*dt, acc.y*dt));
+			const auto& vel = particle.getVel();
+			particle.setPos(particle.getPos() + glm::vec2(vel.x*dt, vel.y*dt));
+
 		}
 	}
 }
@@ -299,7 +301,7 @@ glm::vec2 BHQuadtreeNode::computeGravityAcc(const Particle * const p1, const Par
 	glm::vec2 acc;
 
 	glm::vec2 difference = p2->getPos() - p1->getPos();
-	double dist = glm::length(difference) + 0.001; // Distance between both points
+	double dist = glm::length(difference) + SOFTENER; // Distance between both points
 	if (dist > 0)
 	{
 		const double g = GRAVITATIONAL_CONSTANT * p2->getMass() / (dist*dist*dist);

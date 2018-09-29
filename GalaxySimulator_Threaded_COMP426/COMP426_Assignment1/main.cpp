@@ -16,10 +16,6 @@ using namespace std;
 // Window dimensions
 const GLuint WIDTH = 800, HEIGHT = 800;
 
-// Timing Variables
-float deltaTime = 0.0f; // Time b/w last frame and current frame
-float lastFrame = 0.0f;
-
 // Prototype
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void processInput(GLFWwindow *window);
@@ -64,17 +60,11 @@ int main()
 
 	// Ask user for simulation parameters
 	int numParticle = 9999;
-	double simTimeSeconds = 999;
 	while (numParticle < 10 || numParticle > 5000)
 	{
 		cout << "Please enter the number of particles (10 to 5000) to simulate" << endl;
 		cin >> numParticle;
 	}
-	//while (simTimeSeconds < 10 || simTimeSeconds > 500)
-	//{
-	//	cout << "Please enter the number of seconds (10 to 500) the simulation should run" << endl;
-	//	cin >> simTimeSeconds;
-	//}
 
 	// Load Shaders
 	Shader shader("shaders/vertex.shader", "shaders/fragment.shader");
@@ -84,12 +74,19 @@ int main()
 	ParticleSystem particleSystem(numParticle);
 
 	// Event loop
+	int nbFrame = 0;
+	float lastTime = glfwGetTime();
 	while (!glfwWindowShouldClose(window))
 	{
 		// per-frame Time logic
 		float currentFrame = glfwGetTime();
-		deltaTime = currentFrame - lastFrame;
-		lastFrame = currentFrame;
+		nbFrame++;
+		if (currentFrame - lastTime >= 1.0f)
+		{
+			printf("%f ms/frame or %f fps\n", 1000.0 / double(nbFrame), double(nbFrame));
+			nbFrame = 0;
+			lastTime += 1.0;
+		}
 
 		// Handle inputs
 		processInput(window);
@@ -101,6 +98,7 @@ int main()
 
 		// Update the particles
 		particleSystem.performComputations();
+		float deltaTime = 1.0f/5.0f;
 		particleSystem.integrate(deltaTime *60*60/*24*2*/);
 
 		//Draw
