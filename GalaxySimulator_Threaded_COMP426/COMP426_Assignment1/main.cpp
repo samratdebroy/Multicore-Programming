@@ -5,14 +5,12 @@
 #include <iostream>
 #include <string>
 #include <fstream>
-#include <random>
 #include "glm.hpp"
 #include "gtc/matrix_transform.hpp"
 #include "gtc/type_ptr.hpp"
 
 #include "Shader.h"
-#include "ParticleDisplay.h"
-
+#include "ParticleSystem.h"
 using namespace std;
 
 // Window dimensions
@@ -72,30 +70,18 @@ int main()
 		cout << "Please enter the number of particles (10 to 5000) to simulate" << endl;
 		cin >> numParticle;
 	}
-	while (simTimeSeconds < 10 || simTimeSeconds > 500)
-	{
-		cout << "Please enter the number of seconds (10 to 500) the simulation should run" << endl;
-		cin >> simTimeSeconds;
-	}
+	//while (simTimeSeconds < 10 || simTimeSeconds > 500)
+	//{
+	//	cout << "Please enter the number of seconds (10 to 500) the simulation should run" << endl;
+	//	cin >> simTimeSeconds;
+	//}
 
 	// Load Shaders
 	Shader shader("shaders/vertex.shader", "shaders/fragment.shader");
 	shader.UseProgram();
 
-	// Random Number Generator
-	std::mt19937 rng;
-	rng.seed(std::random_device()());
-	std::uniform_real_distribution<float> randFloat(-1.0f, 1.0f); // distribution in range [-1, 1]
-
 	// Create particles and particle display system
-	std::vector<Particle> particles;
-	particles.reserve(numParticle);
-	for (unsigned int i = 0; i < numParticle; i++)
-	{
-		particles.push_back(Particle(i, 1.0f));
-		particles[i].setPos(glm::vec2(randFloat(rng), randFloat(rng)));
-	}
-	ParticleDisplay particleDisplay(particles);
+	ParticleSystem particleSystem(numParticle);
 
 	// Event loop
 	while (!glfwWindowShouldClose(window))
@@ -113,11 +99,16 @@ int main()
 		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		shader.UseProgram();
-		shader.setVec4("ColorIn", glm::vec4(1.0f, 1.0f, 0.0f, 1.0f));
+		// Update the particles
+		particleSystem.performComputations();
+		particleSystem.integrate(deltaTime *60*60/*24*2*/);
 
 		//Draw
-		particleDisplay.draw();
+		shader.UseProgram();
+		shader.setVec4("ColorIn", glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+		particleSystem.draw(0);
+		shader.setVec4("ColorIn", glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
+		particleSystem.draw(1);
 
 		// Swap the screen buffers
 		glfwSwapBuffers(window);

@@ -14,8 +14,9 @@ private:
 	std::vector<glm::vec2> vertices_;
 
 public:
-	ParticleDisplay(const std::vector<Particle>& particles);
-	void updateParticles(const std::vector<Particle>& particles);
+	ParticleDisplay();
+	void init(const std::vector<Particle>& particles);
+	void updateParticles(const std::vector<Particle>& particles, double xExtent = 1.0, double yExtent = 1.0);
 	~ParticleDisplay();
 	void draw(GLenum drawMode = GL_POINTS);
 
