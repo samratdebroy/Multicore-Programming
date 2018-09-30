@@ -40,7 +40,7 @@ int main()
 		return -1;
 	}
 	glfwMakeContextCurrent(window);
-
+	glfwSwapInterval(0);
 	// Set the callback functions for frame size change
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
@@ -73,43 +73,60 @@ int main()
 	// Create particles and particle display system
 	ParticleSystem particleSystem(numParticle);
 
+
+	ctpl::thread_pool threadPool(1);
+	std::mutex mutex;
+
 	// Event loop
 	int nbFrame = 0;
 	float lastTime = glfwGetTime();
+	float lastPrintTime = glfwGetTime();
+	constexpr float secPerFrame = 1.0f / 30;
 	while (!glfwWindowShouldClose(window))
 	{
+		// Perform computations and update particles in a infinite loop
+		auto result = threadPool.push([&mutex, &particleSystem](int thread_id) {
+			std::lock_guard<std::mutex> lock(mutex);
+			// Update the particles
+			particleSystem.performComputations();
+		});
+
 		// per-frame Time logic
 		float currentFrame = glfwGetTime();
 		nbFrame++;
-		if (currentFrame - lastTime >= 1.0f)
+		if (currentFrame - lastPrintTime >= 1.0f)
 		{
 			printf("%f ms/frame or %f fps\n", 1000.0 / double(nbFrame), double(nbFrame));
 			nbFrame = 0;
-			lastTime += 1.0;
+			lastPrintTime += 1.0;
 		}
 
-		// Handle inputs
-		processInput(window);
+		if (currentFrame - lastTime >= secPerFrame)
+		{
 
-		// Render
-		// Clear the colorbuffer
-		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			// Handle inputs
+			processInput(window);
 
-		// Update the particles
-		particleSystem.performComputations();
+			// Render
+			// Clear the colorbuffer
+			glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		//Draw
-		shader.UseProgram();
-		shader.setVec4("ColorIn", glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
-		particleSystem.draw(0);
-		shader.setVec4("ColorIn", glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
-		particleSystem.draw(1);
+			//Draw
+			std::lock_guard<std::mutex> lock(mutex);
+			shader.UseProgram();
+			shader.setVec4("ColorIn", glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+			particleSystem.draw(0);
+			shader.setVec4("ColorIn", glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
+			particleSystem.draw(1);
 
-		// Swap the screen buffers
-		glfwSwapBuffers(window);
-		// Check if any events have been activiated (key pressed, mouse moved etc.) and call corresponding response functions
-		glfwPollEvents();
+			// Swap the screen buffers
+			glfwSwapBuffers(window);
+			// Check if any events have been activiated (key pressed, mouse moved etc.) and call corresponding response functions
+			glfwPollEvents();
+			lastTime += secPerFrame;
+		}
+		result.get();
 	}
 
 	// Terminate GLFW, clearing any resources allocated by GLFW.

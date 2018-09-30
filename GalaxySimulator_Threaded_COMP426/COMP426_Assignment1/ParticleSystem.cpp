@@ -15,7 +15,7 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 	rng.seed(std::random_device()());
 
 	// Separate particles by galaxies, init with norm dist around different pts per galaxy
-	int numGalaxies = galaxies_.size();
+	const int numGalaxies = galaxies_.size();
 	for (int i = 0; i < numGalaxies; i++)
 	{
 		int galaxySize;
@@ -43,6 +43,13 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 		galaxies_[i].particles.reserve(galaxySize);
 		for (unsigned int j = 0; j < galaxySize; j++)
 		{
+			//if (j == 0)
+			//{
+			//	particles_.push_back(Particle(j, PARTICLE_MASS * 1.0e8));
+			//	galaxies_[i].particles.push_back(&particles_.back());
+			//	galaxies_[i].particles[j]->setPos(galaxyCenter);
+			//	continue;
+			//}
 			particles_.push_back(Particle(j, PARTICLE_MASS));
 			galaxies_[i].particles.push_back(&particles_.back());
 
@@ -53,6 +60,10 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 			// Move it's position away from the center by the minimum galaxy radius
 			pos = pos + glm::vec2(glm::normalize(pos).x*MIN_GALAXY_RADIUS, glm::normalize(pos).y*MIN_GALAXY_RADIUS);
 			galaxies_[i].particles[j]->setPos(pos + galaxyCenter);
+
+			auto const& speed = PARTICLE_MASS * GRAVITATIONAL_CONSTANT / (dist);
+			auto vel = glm::vec2(glm::sin(angle)*speed, -glm::cos(angle)*speed);
+			galaxies_[i].particles[j]->setVel(vel);
 		}
 
 		// Connect these particles to the Particle Displayer
@@ -71,8 +82,8 @@ void ParticleSystem::draw(int galaxyIndex, GLenum drawMode)
 void ParticleSystem::performComputations()
 {
 	// Find the Min/Max values of the frame
-	glm::vec2 min(FLT_MAX / 4, FLT_MAX / 4);
-	glm::vec2 max(-FLT_MAX / 4, -FLT_MAX / 4);
+	glm::vec2 min(FLT_MAX , FLT_MAX);
+	glm::vec2 max(-FLT_MAX , -FLT_MAX);
 	for (const auto& particle : particles_)
 	{
 		const auto& pos = particle.getPos();
