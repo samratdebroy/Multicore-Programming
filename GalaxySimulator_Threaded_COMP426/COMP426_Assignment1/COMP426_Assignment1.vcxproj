@@ -125,6 +125,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="BHQuadtreeNode.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Particle.cpp" />
     <ClCompile Include="ParticleDisplay.cpp" />
@@ -132,10 +133,13 @@
     <ClCompile Include="Shader.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BHQuadtreeNode.h" />
     <ClInclude Include="Particle.h" />
     <ClInclude Include="ParticleDisplay.h" />
     <ClInclude Include="ParticleSystem.h" />
     <ClInclude Include="Shader.h" />
+    <ClInclude Include="SimulationConstants.h" />
+    <ClInclude Include="third_party\ctpl_stl.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\fragment.shader" />

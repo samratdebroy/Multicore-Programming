@@ -4,7 +4,7 @@
 
 ParticleDisplay::ParticleDisplay(){}
 
-void ParticleDisplay::init(const std::vector<Particle>& particles)
+void ParticleDisplay::init(const std::vector<Particle*>& particles)
 {
 	vertices_.resize(particles.size());
 
@@ -15,13 +15,13 @@ void ParticleDisplay::init(const std::vector<Particle>& particles)
 	updateParticles(particles);
 }
 
-void ParticleDisplay::updateParticles(const std::vector<Particle>& particles, double xExtent, double yExtent)
+void ParticleDisplay::updateParticles(const std::vector<Particle*>& particles, double xExtent, double yExtent)
 {
 	// Update vertices
-	for (const Particle& particle : particles)
+	for (const auto particle : particles)
 	{
-		vertices_[particle.getIdx()].x = particle.getPos().x / xExtent;
-		vertices_[particle.getIdx()].y = particle.getPos().y / yExtent;
+		vertices_[particle->getIdx()].x = particle->getPos().x / xExtent;
+		vertices_[particle->getIdx()].y = particle->getPos().y / yExtent;
 	}
 
 	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).

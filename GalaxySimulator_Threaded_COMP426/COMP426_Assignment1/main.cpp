@@ -98,8 +98,6 @@ int main()
 
 		// Update the particles
 		particleSystem.performComputations();
-		float deltaTime = 1.0f/5.0f;
-		particleSystem.integrate(deltaTime *60*60/*24*2*/);
 
 		//Draw
 		shader.UseProgram();
