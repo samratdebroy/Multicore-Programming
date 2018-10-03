@@ -4,7 +4,7 @@
 #include "Particle.h"
 #include "ParticleDisplay.h"
 #include "BHQuadtreeNode.h"
-#include "third_party/ctpl_stl.h"
+#include "ThreadPool.h"
 
 namespace {
 	constexpr int NUM_GALAXIES = 2;
@@ -22,7 +22,7 @@ private:
 	};
 	std::array<Galaxy, NUM_GALAXIES > galaxies_;
 	std::vector<Particle> particles_;
-	ctpl::thread_pool threadPool_;
+	ThreadPool threadPool_;
 
 public:
 	ParticleSystem(unsigned int numParticles);

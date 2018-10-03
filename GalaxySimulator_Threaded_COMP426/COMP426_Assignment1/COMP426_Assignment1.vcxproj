@@ -139,7 +139,7 @@
     <ClInclude Include="ParticleSystem.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="SimulationConstants.h" />
-    <ClInclude Include="third_party\ctpl_stl.h" />
+    <ClInclude Include="ThreadPool.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\fragment.shader" />

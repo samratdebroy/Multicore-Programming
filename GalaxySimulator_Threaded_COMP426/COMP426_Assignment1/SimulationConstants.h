@@ -6,5 +6,4 @@ constexpr double PARTICLE_MASS = 1.0e15;
 constexpr double GRAVITATIONAL_CONSTANT = 6.67408e-11;
 constexpr double THETA = 1.0;
 constexpr double SOFTENER = (MAX_GALAXY_RADIUS)*(MAX_GALAXY_RADIUS);
-constexpr int NUM_THREADS = 8;
 constexpr double TIME_STEP = 0.2*60*60;

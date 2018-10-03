@@ -59,8 +59,8 @@ int main()
 	framebuffer_size_callback(window, width, height); // Sets the window size
 
 	// Ask user for simulation parameters
-	int numParticle = 9999;
-	while (numParticle < 10 || numParticle > 5000)
+	int numParticle = 99999;
+	while (numParticle < 10 || numParticle > 50000)
 	{
 		cout << "Please enter the number of particles (10 to 5000) to simulate" << endl;
 		cin >> numParticle;
@@ -74,7 +74,7 @@ int main()
 	ParticleSystem particleSystem(numParticle);
 
 
-	ctpl::thread_pool threadPool(1);
+	ThreadPool threadPool(1);
 	std::mutex mutex;
 
 	// Event loop
@@ -85,7 +85,7 @@ int main()
 	while (!glfwWindowShouldClose(window))
 	{
 		// Perform computations and update particles in a infinite loop
-		auto result = threadPool.push([&mutex, &particleSystem](int thread_id) {
+		auto result = threadPool.push([&mutex, &particleSystem]() {
 			std::lock_guard<std::mutex> lock(mutex);
 			// Update the particles
 			particleSystem.performComputations();

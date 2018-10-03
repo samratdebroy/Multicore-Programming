@@ -5,10 +5,17 @@
 #include <random>
 #include <limits>
 
+namespace
+{
+	// Only spawn std::thread::hardware_concurrency() - 2 threads
+	// bc one thread used for main and one for computation control
+	const int NUM_THREADS = std::thread::hardware_concurrency() - 2;
+}
+
 ParticleSystem::ParticleSystem(unsigned int numParticles)
 {
 	particles_.reserve(numParticles);
-	threadPool_.resize(NUM_THREADS);
+	threadPool_.init(NUM_THREADS);
 
 	// Random Number Generator
 	std::mt19937 rng;
@@ -43,13 +50,6 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 		galaxies_[i].particles.reserve(galaxySize);
 		for (unsigned int j = 0; j < galaxySize; j++)
 		{
-			//if (j == 0)
-			//{
-			//	particles_.push_back(Particle(j, PARTICLE_MASS * 1.0e8));
-			//	galaxies_[i].particles.push_back(&particles_.back());
-			//	galaxies_[i].particles[j]->setPos(galaxyCenter);
-			//	continue;
-			//}
 			particles_.push_back(Particle(j, PARTICLE_MASS));
 			galaxies_[i].particles.push_back(&particles_.back());
 
@@ -114,7 +114,7 @@ void ParticleSystem::performComputations()
 	results.reserve(particles_.size());
 	for (auto& particle : particles_)
 	{
-		results.emplace_back(threadPool_.push([&particle, &root](int thread_id){
+		results.emplace_back(threadPool_.push([&particle, &root](){
 				particle.setAcc(root.computeForceFromNode(&particle)); 
 		}));
 	}
@@ -123,12 +123,12 @@ void ParticleSystem::performComputations()
 		result.wait();
 	}
 
-	// Update the position and velocity of each particle
+	// Update the position and velocity of each particle ; split work evenly bw threads
 	results.clear();
 	results.reserve(NUM_THREADS);
 	for (int i = 0; i < NUM_THREADS; i++)
 	{
-		results.emplace_back(threadPool_.push([this, i](int thread_id) {
+		results.emplace_back(threadPool_.push([this, i]() {
 			int batchSize = particles_.size() / NUM_THREADS;
 			int end = (i < NUM_THREADS - 1) ? batchSize*(i+1) : particles_.size();
 			for (int j = batchSize * i; j < end; j++)
