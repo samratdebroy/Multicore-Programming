@@ -60,7 +60,7 @@ int main()
 
 	// Ask user for simulation parameters
 	int numParticle = 99999;
-	while (numParticle < 10 || numParticle > 50000)
+	while (numParticle < 10 || numParticle > 5000)
 	{
 		cout << "Please enter the number of particles (10 to 5000) to simulate" << endl;
 		cin >> numParticle;

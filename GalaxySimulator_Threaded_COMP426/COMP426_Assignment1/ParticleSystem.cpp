@@ -82,23 +82,58 @@ void ParticleSystem::draw(int galaxyIndex, GLenum drawMode)
 void ParticleSystem::performComputations()
 {
 	// Find the Min/Max values of the frame
-	glm::vec2 min(FLT_MAX , FLT_MAX);
-	glm::vec2 max(-FLT_MAX , -FLT_MAX);
-	for (const auto& particle : particles_)
+	auto getMinMax = [this](int batchSize,int batchNumber , int end, std::vector<glm::vec2>* collection) -> auto
 	{
-		const auto& pos = particle.getPos();
-		if (pos.x < min.x)
-			min.x = pos.x;
-		if (pos.y < min.y)
-			min.y = pos.y;
-		if (pos.x > max.x)
-			max.x = pos.x;
-		if (pos.y > max.y)
-			max.y = pos.y;
+		std::pair<glm::vec2, glm::vec2> minmax;
+		auto min = glm::vec2(FLT_MAX, FLT_MAX);
+		auto max = glm::vec2(-FLT_MAX, -FLT_MAX);
+		for (int j = batchSize * batchNumber; j < end; ++j)
+		{
+			glm::vec2 pos;
+			if (collection)
+			{
+				pos = collection->at(j);
+			}
+			else
+			{
+				pos = particles_[j].getPos();
+			}
+
+			if (pos.x < min.x)
+				min.x = pos.x;
+			if (pos.y < min.y)
+				min.y = pos.y;
+			if (pos.x > max.x)
+				max.x = pos.x;
+			if (pos.y > max.y)
+				max.y = pos.y;
+		}
+		minmax.first = min;
+		minmax.second = max;
+		return minmax;
+	};
+	// As evenly as possible, split all the particles among the different threads
+	// and compute the min/max of each group
+	std::vector<std::future<std::pair<glm::vec2, glm::vec2>>> minMaxFutures;
+	minMaxFutures.reserve(NUM_THREADS);
+	for (int i = 0; i < NUM_THREADS; ++i)
+	{
+		const int batchSize = particles_.size() / NUM_THREADS;
+		const int end = (i < NUM_THREADS - 1) ? batchSize * (i + 1) : particles_.size();
+		minMaxFutures.emplace_back(threadPool_.push(getMinMax, batchSize, i, end, nullptr));
 	}
+	// Compute the min/max among the mins/maxes found by each thread
+	std::vector<glm::vec2> minMaxes;
+	for (auto& result : minMaxFutures)
+	{
+		const auto minmax = result.get();
+		minMaxes.push_back(minmax.first);
+		minMaxes.push_back(minmax.second);
+	}
+	const auto minmax = getMinMax(0, 0, minMaxes.size(), &minMaxes);
 
 	// Create root for quad tree
-	BHQuadtreeNode root(min,max,nullptr);
+	BHQuadtreeNode root(minmax.first, minmax.second,nullptr);
 
 	// Build tree by inserting all the particles
 	for (auto& particle : particles_)
@@ -126,12 +161,12 @@ void ParticleSystem::performComputations()
 	// Update the position and velocity of each particle ; split work evenly bw threads
 	results.clear();
 	results.reserve(NUM_THREADS);
-	for (int i = 0; i < NUM_THREADS; i++)
+	for (int i = 0; i < NUM_THREADS; ++i)
 	{
 		results.emplace_back(threadPool_.push([this, i]() {
 			int batchSize = particles_.size() / NUM_THREADS;
 			int end = (i < NUM_THREADS - 1) ? batchSize*(i+1) : particles_.size();
-			for (int j = batchSize * i; j < end; j++)
+			for (int j = batchSize * i; j < end; ++j)
 			{
 				integrate(TIME_STEP, &particles_[j]);
 			}
