@@ -18,3 +18,8 @@ GalaxySimulator_Threaded_COMP426/COMP426_Assignment1/COMP426_Assignment1.exe
 GalaxySimulator_Threaded_COMP426/COMP426 Assignment 1 Report SamratDebroy.pdf
 SamratDebroy40002159_COMP426_Assignment1.zip
 COMP426-Assignment1_Rubric.pdf
+CourseContent/
+*.ipch
+GalaxySimulator_TBB_COMP426/COMP426_Assignment2/Release/
+GalaxySimulator_TBB_COMP426/COMP426_Assignment2/x64/
+GalaxySimulator_TBB_COMP426/Release/
