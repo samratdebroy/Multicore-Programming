@@ -2,8 +2,8 @@
 #include "libs\glew\glew.h"	// include GL Extension Wrangler
 #include "libs\glfw\glfw3.h"	// include GLFW helper library
 #include "tbb/queuing_mutex.h"
+#include "tbb/task_group.h"
 
-#include<thread>
 #include<atomic>
 #include <stdio.h>
 #include <iostream>
@@ -78,7 +78,7 @@ int main()
 	// Create particles and particle display system
 	ParticleSystem particleSystem(numParticle);
 
-	// Perform computations and update particles in a infinite loop
+	// Perform computations and update particles in a infinite loop in parallel to main thread
 	tbb::queuing_mutex mutex;
 	std::atomic_bool loopFlag = true;
 	auto performComputations = [&mutex, &particleSystem, &loopFlag]() {
@@ -92,7 +92,7 @@ int main()
 			float currentFrame = glfwGetTime();
 			if (currentFrame - lastPrintTime >= 1.0f)
 			{
-				printf("%f ms/frame or %f fps\n", 1000.0 / double(nbFrame), double(nbFrame));
+				printf("Simulation Metrics: %f ms/frame or %f fps\n", 1000.0 / double(nbFrame), double(nbFrame));
 				nbFrame = 0;
 				lastPrintTime += 1.0;
 			}
@@ -100,11 +100,10 @@ int main()
 			particleSystem.performComputations();
 		}
 	};
-	std::thread controlThread(performComputations);
+	tbb::task_group taskGroup;
+	taskGroup.run(performComputations);
 
 	// Event loop
-
-
 	float lastTime = glfwGetTime();
 	constexpr float secPerFrame = 1.0f / 30;
 	while (!glfwWindowShouldClose(window))
@@ -141,7 +140,7 @@ int main()
 	}
 	// Computation thread should stop
 	loopFlag = false;
-	controlThread.join();
+	taskGroup.wait();
 	// Terminate GLFW, clearing any resources allocated by GLFW.
 	glfwTerminate();
 	return 0;

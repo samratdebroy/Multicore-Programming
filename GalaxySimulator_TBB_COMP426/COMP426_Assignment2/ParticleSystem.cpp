@@ -10,6 +10,13 @@
 #include <random>
 #include <limits>
 
+// #define PROFILE true // Uncomment to profile
+#ifdef PROFILE
+#include <iostream>
+#include <chrono>
+typedef std::chrono::high_resolution_clock Clock;
+#endif
+
 ParticleSystem::ParticleSystem(unsigned int numParticles)
 {
 	particles_.reserve(numParticles);
@@ -78,7 +85,10 @@ void ParticleSystem::draw(int galaxyIndex, GLenum drawMode)
 
 void ParticleSystem::performComputations()
 {
-	// Find the Min/Max values of the frame
+#ifdef PROFILE
+	auto t1 = Clock::now();
+#endif
+	// 1. Find the Min/Max values of the frame
 	auto getMinMax = [&](const tbb::blocked_range<size_t>& range, std::pair<glm::vec2, glm::vec2> minmax) -> auto
 	{
 		auto& min = minmax.first;
@@ -121,19 +131,40 @@ void ParticleSystem::performComputations()
 		}
 	);
 
-	// Create root for quad tree
+#ifdef PROFILE
+	std::cout << "1. Min Max calculations: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+	t1 = Clock::now();
+#endif
+
+	// 2. Create root for quad tree
 	BHQuadtreeNode root(minmax.first, minmax.second,nullptr);
 
-	// Build tree by inserting all the particles
+	// 3. Build tree by inserting all the particles
 	for (auto& particle : particles_)
 	{
 		root.insertParticle(&particle);
 	}
 
-	// Compute mass distribution
+#ifdef PROFILE
+	std::cout << "2. and 3. Create root and build tree: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+	t1 = Clock::now();
+#endif
+
+	// 4. Compute mass distribution
 	root.computeMassDistribution();
 
-	// Compute acceleration of each particle due to external forces
+#ifdef PROFILE
+	std::cout << "4. mass distribution: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+	t1 = Clock::now();
+#endif 
+
+	// 5. Compute acceleration of each particle due to external forces
 	tbb::parallel_for(tbb::blocked_range<size_t>(0, particles_.size()),
 		[&](const tbb::blocked_range<size_t>& range) {
 			for (size_t i = range.begin(); i != range.end(); ++i)
@@ -144,7 +175,14 @@ void ParticleSystem::performComputations()
 		tbb::auto_partitioner() // The default partitioner
 	);
 
-	// Update the position and velocity of each particle
+#ifdef PROFILE
+	std::cout << "5. compute acceleration: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+	t1 = Clock::now();
+#endif
+
+	// 6. Update the position and velocity of each particle
 	tbb::parallel_for(tbb::blocked_range<size_t>(0, particles_.size()),
 		[&](const tbb::blocked_range<size_t>& range) {
 			for (size_t i = range.begin(); i != range.end(); ++i)
@@ -154,6 +192,12 @@ void ParticleSystem::performComputations()
 		}, // The body
 		tbb::auto_partitioner() // The default partitioner
 		);
+
+#ifdef PROFILE
+	std::cout << "6. integrate: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+#endif
 }
 
 void ParticleSystem::integrate(double dt, Particle* particle)
