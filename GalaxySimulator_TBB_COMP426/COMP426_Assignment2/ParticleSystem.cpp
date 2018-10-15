@@ -65,7 +65,7 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 			pos = pos + glm::vec2(glm::normalize(pos).x*MIN_GALAXY_RADIUS, glm::normalize(pos).y*MIN_GALAXY_RADIUS);
 			galaxies_[i].particles[j]->setPos(pos + galaxyCenter);
 
-			auto const& speed = PARTICLE_MASS * GRAVITATIONAL_CONSTANT / (dist);
+			auto const& speed = PARTICLE_MASS * GRAVITATIONAL_CONSTANT / (dist) *50;
 			auto vel = glm::vec2(glm::sin(angle)*speed, -glm::cos(angle)*speed);
 			galaxies_[i].particles[j]->setVel(vel);
 		}
