@@ -18,8 +18,8 @@ void ParticleDisplay::updateParticles(const std::vector<Particle*>& particles, d
 	// Update vertices
 	for (const auto particle : particles)
 	{
-		vertices_[particle->getIdx()].x = particle->getPos().x / xExtent;
-		vertices_[particle->getIdx()].y = particle->getPos().y / yExtent;
+		vertices_[particle->getDispIdx()].x = particle->getPos().x / xExtent;
+		vertices_[particle->getDispIdx()].y = particle->getPos().y / yExtent;
 	}
 
 	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).

@@ -11,7 +11,7 @@ class ParticleSystem
 private:
 
 	static constexpr int NUM_GALAXIES = 2;
-	static constexpr int NUM_PARTICLES = 10000;
+	static constexpr int NUM_PARTICLES = 5000;
 
 	// particles and display for two galaxies
 	struct Galaxy

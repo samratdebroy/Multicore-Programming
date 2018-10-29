@@ -61,32 +61,28 @@ int main()
 	glfwGetFramebufferSize(window, &width, &height);
 	framebuffer_size_callback(window, width, height); // Sets the window size
 
-	// Ask user for simulation parameters
-	int numParticle = 99999;
-	while (numParticle < 10 || numParticle > 50000)
-	{
-		cout << "Please enter the number of particles (10 to 50000) to simulate" << endl;
-		cin >> numParticle;
-	}
-
 	// Load Shaders
 	Shader shader("shaders/vertex.shader", "shaders/fragment.shader");
 	shader.UseProgram();
 
 	// Create particles and particle display system
-	ParticleSystem particleSystem(numParticle);
+	ParticleSystem particleSystem(1);
 
 	// Perform computations and update particles in a infinite loop in parallel to main thread
 	std::mutex mutex;
 	std::condition_variable cond;
 	std::atomic_bool loopFlag = true;
+	std::atomic_bool isDisplaying = false;
 
-	auto performComputations = [&mutex, &cond, &particleSystem, &loopFlag]() {
+	auto performComputations = [&mutex, &cond, &particleSystem, &loopFlag, &isDisplaying]() {
 		int nbFrame = 0;
 		float lastPrintTime = glfwGetTime();
 		while (loopFlag)
 		{
-			std::lock_guard<std::mutex> lock(mutex);
+			std::unique_lock<std::mutex> lock(mutex);
+			while (isDisplaying) 
+				cond.wait(lock);
+
 			// Update FPS counter
 			nbFrame++;
 			float currentFrame = glfwGetTime();
@@ -99,6 +95,7 @@ int main()
 			// Update the particles
 			particleSystem.performComputations();
 			cond.notify_one();
+			lock.unlock();
 		}
 	};
 	std::thread computation_thread(performComputations);
@@ -124,8 +121,9 @@ int main()
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 			//Draw
+			isDisplaying = true;
 			std::unique_lock<std::mutex> lock(mutex);
-			cond.wait(lock); // TODO: lambda return???
+			isDisplaying = false;
 			shader.UseProgram();
 			shader.setVec4("ColorIn", glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
 			particleSystem.draw(0);
@@ -137,6 +135,8 @@ int main()
 			// Check if any events have been activiated (key pressed, mouse moved etc.) and call corresponding response functions
 			glfwPollEvents();
 			lastTime += secPerFrame;
+			//isDisplaying = false;
+			cond.notify_one();
 			lock.unlock();
 		}
 	}

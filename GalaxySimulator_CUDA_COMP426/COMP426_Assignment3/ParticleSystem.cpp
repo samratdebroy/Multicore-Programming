@@ -14,10 +14,10 @@ typedef std::chrono::high_resolution_clock Clock;
 
 ParticleSystem::ParticleSystem(unsigned int numParticles)
 {
-	particles_.reserve(numParticles);
-
 	// TODO: remove hack
 	numParticles = NUM_PARTICLES;
+
+	particles_.reserve(numParticles);
 
 	// Random Number Generator
 	std::mt19937 rng;
@@ -25,6 +25,7 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 
 	// Separate particles by galaxies, init with norm dist around different pts per galaxy
 	const int numGalaxies = galaxies_.size();
+	int idx = -1;
 	for (int i = 0; i < numGalaxies; i++)
 	{
 		int galaxySize;
@@ -50,7 +51,6 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 
 		// Create particles
 		galaxies_[i].particles.reserve(galaxySize);
-		int idx = -1;
 		for (unsigned int j = 0; j < galaxySize; j++)
 		{
 			++idx;
@@ -81,6 +81,9 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
 		return;
 	}
+
+	// Make sure computations are performed at least once after initialization
+	performComputations();
 }
 
 void ParticleSystem::draw(int galaxyIndex, GLenum drawMode)
@@ -165,11 +168,14 @@ void ParticleSystem::performComputations()
 #endif
 
 	// 6. Update the position and velocity of each particle
-	cudaError_t cudaStatus = integrate_with_cuda(TIME_STEP, pos_, vel_, acc_, NUM_PARTICLES);
-	if (cudaStatus != cudaSuccess) {
-		fprintf(stderr, "addWithCuda failed!");
-		return;
-	}
+	for (auto& particle : particles_)
+		integrate(TIME_STEP, &particle);
+
+	//cudaError_t cudaStatus = integrate_with_cuda(TIME_STEP, pos_, vel_, acc_, NUM_PARTICLES);
+	//if (cudaStatus != cudaSuccess) {
+	//	fprintf(stderr, "addWithCuda failed!");
+	//	return;
+	//}
 
 #ifdef PROFILE
 	std::cout << "6. integrate: "
