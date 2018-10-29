@@ -1,0 +1,199 @@
+#include "cuda_computation.cu"
+#include <random>
+#include <limits>
+
+#include "ParticleSystem.h"
+#include "SimulationConstants.h"
+
+// #define PROFILE true // Uncomment to profile
+#ifdef PROFILE
+#include <iostream>
+#include <chrono>
+typedef std::chrono::high_resolution_clock Clock;
+#endif
+
+ParticleSystem::ParticleSystem(unsigned int numParticles)
+{
+	particles_.reserve(numParticles);
+
+	// TODO: remove hack
+	numParticles = NUM_PARTICLES;
+
+	// Random Number Generator
+	std::mt19937 rng;
+	rng.seed(std::random_device()());
+
+	// Separate particles by galaxies, init with norm dist around different pts per galaxy
+	const int numGalaxies = galaxies_.size();
+	for (int i = 0; i < numGalaxies; i++)
+	{
+		int galaxySize;
+		if (i < numGalaxies - 1 && numGalaxies > 1)
+		{
+			// Assign a random portion of the particles to this galaxy
+			std::uniform_real_distribution<double> randDouble(0.3/(numGalaxies-1), 0.7/(numGalaxies-1));
+			galaxySize = numParticles * randDouble(rng);
+			numParticles -= galaxySize;
+		}
+		else
+		{
+			galaxySize = numParticles;
+		}
+
+		// Get an initial center point for the galaxy around which particles will spawn
+		std::uniform_real_distribution<double> randDouble(-0.6*SIM_SIZE,0.6*SIM_SIZE);
+		auto galaxyCenter = make_float2(randDouble(rng), randDouble(rng));
+		
+		// Use a uniform dist to get angle and distance from center
+		std::uniform_real_distribution<double> randAngle(0, 2*3.141592653); // distribution returns angle between 0 and 2*PI rads
+		std::uniform_real_distribution<double> randDistFromCenter(0.0, MAX_GALAXY_RADIUS);
+
+		// Create particles
+		galaxies_[i].particles.reserve(galaxySize);
+		int idx = -1;
+		for (unsigned int j = 0; j < galaxySize; j++)
+		{
+			++idx;
+			mass_[idx] = PARTICLE_MASS;
+			particles_.push_back(Particle(idx, j, mass_, pos_, vel_, acc_));
+			galaxies_[i].particles.push_back(&particles_.back());
+
+			// Calculate point's position relative to galaxy center
+			auto const& angle = randAngle(rng); // Angle from center at which particle will spawn
+			auto const& dist = randDistFromCenter(rng); // distance from center at which particle will spawn
+			auto pos = make_float2(glm::cos(angle)*dist, glm::sin(angle)*dist);
+			// Move it's position away from the center by the minimum galaxy radius
+			pos = pos + make_float2(glm::normalize(pos).x*MIN_GALAXY_RADIUS, glm::normalize(pos).y*MIN_GALAXY_RADIUS);
+			galaxies_[i].particles[j]->setPos(pos + galaxyCenter);
+
+			auto const& speed = PARTICLE_MASS * GRAVITATIONAL_CONSTANT / (dist) *50;
+			auto vel = make_float2(glm::sin(angle)*speed, -glm::cos(angle)*speed);
+			galaxies_[i].particles[j]->setVel(vel);
+		}
+
+		// Connect these particles to the Particle Displayer
+		galaxies_[i].particleDisplay.init(galaxies_[i].particles);
+	}
+
+	// Choose which GPU to run on, change this on a multi-GPU system.
+	auto cudaStatus = cudaSetDevice(0);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
+		return;
+	}
+}
+
+void ParticleSystem::draw(int galaxyIndex, GLenum drawMode)
+{
+	const auto& xExtent = SIM_SIZE;
+	const auto& yExtent = SIM_SIZE;
+	galaxies_[galaxyIndex].particleDisplay.updateParticles(galaxies_[galaxyIndex].particles, xExtent, yExtent);
+	galaxies_[galaxyIndex].particleDisplay.draw(drawMode);
+}
+
+void ParticleSystem::performComputations()
+{
+#ifdef PROFILE
+	auto t1 = Clock::now();
+#endif
+	// 1. Find the Min/Max values of the frame
+	std::pair<float2, float2> minmax;
+	minmax.first = make_float2(FLT_MAX, FLT_MAX);
+	minmax.second = make_float2(-FLT_MAX, -FLT_MAX);
+	for (auto& particle : particles_)
+	{
+		auto& min = minmax.first;
+		auto& max = minmax.second;
+
+		const auto& pos = particle.getPos();
+		if (pos.x < min.x)
+			min.x = pos.x;
+		if (pos.y < min.y)
+			min.y = pos.y;
+		if (pos.x > max.x)
+			max.x = pos.x;
+		if (pos.y > max.y)
+			max.y = pos.y;
+	}
+
+
+#ifdef PROFILE
+	std::cout << "1. Min Max calculations: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+	t1 = Clock::now();
+#endif
+
+	// 2. Create root for quad tree
+	BHQuadtreeNode root(minmax.first, minmax.second,nullptr);
+
+	// 3. Build tree by inserting all the particles
+	for (auto& particle : particles_)
+	{
+		root.insertParticle(&particle);
+	}
+
+#ifdef PROFILE
+	std::cout << "2. and 3. Create root and build tree: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+	t1 = Clock::now();
+#endif
+
+	// 4. Compute mass distribution
+	root.computeMassDistribution();
+
+#ifdef PROFILE
+	std::cout << "4. mass distribution: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+	t1 = Clock::now();
+#endif 
+
+	// 5. Compute acceleration of each particle due to external forces
+	for (size_t i = 0; i < particles_.size(); ++i)
+	{
+		particles_[i].setAcc(root.computeForceFromNode(&particles_[i]));
+	}
+
+
+#ifdef PROFILE
+	std::cout << "5. compute acceleration: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+	t1 = Clock::now();
+#endif
+
+	// 6. Update the position and velocity of each particle
+	cudaError_t cudaStatus = integrate_with_cuda(TIME_STEP, pos_, vel_, acc_, NUM_PARTICLES);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "addWithCuda failed!");
+		return;
+	}
+
+#ifdef PROFILE
+	std::cout << "6. integrate: "
+		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
+		<< " microseconds" << std::endl;
+#endif
+}
+
+void ParticleSystem::integrate(double dt, Particle* particle)
+{
+	// Integrate velocity and position of all particles
+	const auto& acc = particle->getAcc();
+	particle->setVel(particle->getVel() +acc*dt);
+	const auto& vel = particle->getVel();
+	particle->setPos(particle->getPos() + vel*dt);
+}
+
+ParticleSystem::~ParticleSystem()
+{
+	// cudaDeviceReset must be called before exiting in order for profiling and
+	// tracing tools such as Nsight and Visual Profiler to show complete traces.
+	auto cudaStatus = cudaDeviceReset();
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "cudaDeviceReset failed!");
+		return;
+	}
+}
