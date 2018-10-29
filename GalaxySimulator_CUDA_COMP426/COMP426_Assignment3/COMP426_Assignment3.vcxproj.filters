@@ -69,5 +69,8 @@
     <ClInclude Include="SimulationConstants.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="cuda_computation.cuh">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

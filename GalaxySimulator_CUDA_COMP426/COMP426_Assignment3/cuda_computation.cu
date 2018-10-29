@@ -1,6 +1,5 @@
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
-#include<cuda_helper\helper_math.h>
+#include "cuda_computation.cuh"
+
 #include <stdio.h>
 
 __global__ void integrate_kernel(float dt, float2* pos, float2* vel, const float2* acc)
@@ -59,7 +58,7 @@ cudaError_t integrate_with_cuda(float dt, float2* pos, float2* vel, const float2
 	// Launch a kernel on the GPU with one thread for each element.
 	int BLOCKSIZE = 32;
 	int NUM_BLOCKS = (size + BLOCKSIZE - 1) / BLOCKSIZE;
-	integrate_kernel <<<NUM_BLOCKS, BLOCKSIZE >>>(dt, dev_pos, dev_vel, dev_acc);
+	integrate_kernel<<<NUM_BLOCKS, BLOCKSIZE >>>(dt, dev_pos, dev_vel, dev_acc);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();

@@ -1,4 +1,4 @@
-#include "cuda_computation.cu"
+#include "cuda_computation.cuh"
 #include <random>
 #include <limits>
 
@@ -63,7 +63,7 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 			auto const& dist = randDistFromCenter(rng); // distance from center at which particle will spawn
 			auto pos = make_float2(glm::cos(angle)*dist, glm::sin(angle)*dist);
 			// Move it's position away from the center by the minimum galaxy radius
-			pos = pos + make_float2(glm::normalize(pos).x*MIN_GALAXY_RADIUS, glm::normalize(pos).y*MIN_GALAXY_RADIUS);
+			pos = pos + make_float2(glm::normalize(glm::vec2(pos.x, pos.y)).x*MIN_GALAXY_RADIUS, glm::normalize(glm::vec2(pos.x, pos.y)).y*MIN_GALAXY_RADIUS);
 			galaxies_[i].particles[j]->setPos(pos + galaxyCenter);
 
 			auto const& speed = PARTICLE_MASS * GRAVITATIONAL_CONSTANT / (dist) *50;
