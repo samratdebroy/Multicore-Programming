@@ -2,175 +2,6 @@
 #include "SimulationConstants.h"
 #include <stdio.h>
 
-const int BLOCKSIZE_HOST = 64;
-__device__ const int BLOCKSIZE = 64;
-__device__ const int MAX_DEPTH = 64;
-__device__ const int WARP_SIZE = 32;
-//__device__ const float THETA = 1.0f;
-//__device__ const float GRAVITATIONAL_CONSTANT = 6.67408e-11;
-
-/**
-__global__ void build_tree_kernel(float2* pos, float* mass, int* count, int* start, int* child, int* index, float2 bottom_left, float2 top_right, int num_particles, int num_nodes)
-{
-	int particleID = threadIdx.x + blockIdx.x*blockDim.x;
-	int stride = blockDim.x*gridDim.x;
-	bool particleIsInTree = false;
-
-	// build quadtree
-	float minX;
-	float maxX;
-	float minY;
-	float maxY;
-	int childPath;
-	int nodeID;
-
-	// Add every particle assigned to this block
-	while ((particleID) < num_particles) {
-
-		// If the particle isn't already in the tree, then add it
-		if (!particleIsInTree) {
-			particleIsInTree = true;
-
-			minX = bottom_left.x;
-			maxX = top_right.x;
-			minY = bottom_left.y;
-			maxY = top_right.y;
-
-			// Check which quadrant the particle belongs to and get the appropriate path
-			nodeID = 0;
-			childPath = 0;
-			if (pos[particleID].x < 0.5*(minX + maxX)) {
-				childPath += 1;
-				maxX = 0.5*(minX + maxX);
-			}
-			else {
-				minX = 0.5*(minX + maxX);
-			}
-			if (pos[particleID].y < 0.5*(minY + maxY)) {
-				childPath += 2;
-				maxY = 0.5*(maxY + minY);
-			}
-			else {
-				minY = 0.5*(maxY + minY);
-			}
-		}
-		int childIndex = child[nodeID * 4 + childPath];
-
-		// traverse tree until we hit leaf node
-		while (childIndex >= num_particles) {
-
-			// Again, at each iteration find the appropriate quadrant/childpath to traverse
-			nodeID = childIndex;
-			childPath = 0;
-			if (pos[particleID].x < 0.5*(minX + maxX)) {
-				childPath += 1;
-				maxX = 0.5*(minX + maxX);
-			}
-			else {
-				minX = 0.5*(minX + maxX);
-			}
-			if (pos[particleID].y < 0.5*(minY + maxY)) {
-				childPath += 2;
-				maxY = 0.5*(maxY + minY);
-			}
-			else {
-				minY = 0.5*(maxY + minY);
-			}
-
-			atomicAdd(&pos[nodeID].x, mass[particleID] * pos[particleID].x);
-			atomicAdd(&pos[nodeID].y, mass[particleID] * pos[particleID].y);
-			atomicAdd(&mass[nodeID], mass[particleID]);
-			atomicAdd(&count[nodeID], 1);
-			childIndex = child[nodeID * 4 + childPath];
-		}
-
-
-		if (childIndex != -2) {
-			int locked = nodeID * 4 + childPath;
-			// TODO: atomicCAS is deprecated, replace
-			if (atomicCAS(&child[locked], childIndex, -2) == childIndex) {
-				if (childIndex == -1) {
-					child[locked] = particleID;
-				}
-				else {
-					int patch = 4 * num_particles; //TODO: rename
-					while (childIndex >= 0 && childIndex < num_particles) {
-
-						int node = atomicAdd(index, 1);
-						patch = min(patch, node);
-						if (patch != node) {
-							child[4 * nodeID + childPath] = node;
-						}
-
-						// insert old particle
-						childPath = 0;
-						if (pos[childIndex].x < 0.5*(minX + maxX)) {
-							childPath += 1;
-						}
-						if (pos[childIndex].y < 0.5*(minY + maxY)) {
-							childPath += 2;
-						}
-
-						//if (DEBUG) {
-						//
-						//	if (node >= num_nodes) {
-						//		printf("%s\n", "error node index is too large!!");
-						//		printf("node: %d\n", node);
-						//	}
-						//}
-
-						pos[node] += mass[childIndex] * pos[childIndex];
-						mass[node] += mass[childIndex];
-						count[node] += count[childIndex];
-						child[4 * node + childPath] = childIndex;
-
-						start[node] = -1;
-
-
-						// insert new particle
-						nodeID = node;
-						childPath = 0;
-						if (pos[particleID].x < 0.5*(minX + maxX)) {
-							childPath += 1;
-							maxX = 0.5*(minX + maxX);
-						}
-						else {
-							minX = 0.5*(minX + maxX);
-						}
-						if (pos[particleID].y < 0.5*(minY + maxY)) {
-							childPath += 2;
-							maxY = 0.5*(maxY + minY);
-						}
-						else {
-							minY = 0.5*(maxY + minY);
-						}
-						pos[node] += mass[particleID] * pos[particleID];
-						mass[node] += mass[particleID];
-						count[node] += count[particleID];
-						childIndex = child[4 * nodeID + childPath];
-					}
-
-					child[4 * nodeID + childPath] = particleID;
-
-					__threadfence();  // we have been writing to global memory arrays (child, x, y, mass) thus need to fence
-
-					child[locked] = patch;
-				}
-
-				// __threadfence(); // we have been writing to global memory arrays (child, x, y, mass) thus need to fence
-
-				particleID += stride;
-				particleIsInTree = false;
-			}
-
-		}
-
-		__syncthreads(); // not strictly needed 
-	}
-}
-
-**/
-
 // Reset the QuadTree for a new set of computations
 __global__ void reset_quadtree_kernel(float2* pos, float* mass, int* child, int num_particles, int num_nodes)
 {
@@ -202,7 +33,7 @@ __global__ void compute_force_from_nodes_kernel(float2* pos, float2* acc, float*
 	const int stride = blockDim.x*gridDim.x;
 	const int warp_groupID = threadIdx.x / WARP_SIZE;	// Which warp group this thread is part of in the block
 	const int warpID = threadIdx.x % WARP_SIZE;			// Local ID of the thread within its warp
-	const int stackID = MAX_DEPTH * warp_groupID;		// Index in the stack at which this warp's data starts
+	const int stack_startIdx = MAX_DEPTH * warp_groupID;		// Index in the stack at which this warp's data starts
 
 	// Create two stacks that keeps track of the size of a quadrant at each depth
 	// and that tracks children to visit
@@ -212,6 +43,9 @@ __global__ void compute_force_from_nodes_kernel(float2* pos, float2* acc, float*
 	// Max radius of the top level quadrant that encompasses all the particles
 	const float quadrant_radius = 0.5*(min_max_extents->x - min_max_extents->z);
 
+	// The stack is initialized with the valid children of the root node
+	// Every thread needs to be aware of how many valid children the root has
+	// so that they can offset the stack's top pointer appropriately
 	int stack_offset = -1;
 	for (int i = 0; i < 4; ++i)
 	{
@@ -225,13 +59,16 @@ __global__ void compute_force_from_nodes_kernel(float2* pos, float2* acc, float*
 	// Compute acceleration for every particle assigned to this block
 	while (particleID < num_particles) {
 
-		int sortedIndex = particleID; // TODO: this should be returned from a sorted ID list
+		// TODO: this should be returned from a sorted ID list
+		// Ensuring that particles computed in the same warp are close to each other
+		// will reduce warp divergence which results in a serial execution of the threads
+		// could get close to a 32x speedup if the particles are properly sorted beforehand!
+		int sortedIndex = particleID;
 
 		float2 particle_pos = pos[sortedIndex];
 		float2 particle_acc = make_float2(0.0f, 0.0f);
 
 		// Initialize the stack using the first thread of the warp
-		int stack_top = stackID + stack_offset; // Keep track of where the stack's top pointer is for this warp
 		if (warpID == 0)
 		{
 			int childID = 0;
@@ -241,8 +78,8 @@ __global__ void compute_force_from_nodes_kernel(float2* pos, float2* acc, float*
 				int root_nodeID = num_particles * 4;
 				if (child[i + root_nodeID] != -1)
 				{
-					stack[stackID + childID] = child[i + root_nodeID];
-					quadrant_size[stackID + childID] = quadrant_radius * quadrant_radius / THETA;
+					stack[stack_startIdx + childID] = child[i + root_nodeID];
+					quadrant_size[stack_startIdx + childID] = quadrant_radius * quadrant_radius / THETA;
 					++childID;
 				}
 			}
@@ -252,7 +89,8 @@ __global__ void compute_force_from_nodes_kernel(float2* pos, float2* acc, float*
 		__syncthreads();
 
 		// While the stack is not empty for this warp
-		while (stack_top >= stackID)
+		int stack_top = stack_startIdx + stack_offset; // Keep track of where the stack's top pointer is for this 
+		while (stack_top >= stack_startIdx)
 		{
 			// Get a node from the top of the stack
 			int nodeID = stack[stack_top];
@@ -288,13 +126,17 @@ __global__ void compute_force_from_nodes_kernel(float2* pos, float2* acc, float*
 							quadrant_size[stack_top] = next_quadrant_size;
 						}
 						stack_top++;
-						//__syncthreads(); // TODO:  Is this necessary?
 					}
 				}
 				else
 				{
-					// TODO: If the remaining nodes will also be null if this child is null then you can early-exit
-					// stack_top = max(stackID, stack_top -1); 
+					/**
+					 The article "An Efficient CUDA Implementation of the Tree - Based Barnes Hut n-Body Algorithm" (Martin Burtscher, Keshav Pingali)
+					 suggests that: If the remaining nodes will also be null if this child is null then you can early-exit using:
+					 stack_top = max(stack_startIdx, stack_top -1); 
+					 but in this architecture we have no guarantee that if the first child is null then the second will also be null, so this isn't implemented
+					*/
+
 				}
 			}
 			--stack_top;
@@ -324,8 +166,6 @@ cudaError_t reset_quadtree_with_cuda(float2* pos, float* mass, int* child)
 	float2 *dev_pos = 0;
 	float *dev_mass = 0;
 	int *dev_child = 0;
-	//int *dev_num_particles = 0;
-	//int *dev_num_nodes = 0;
 
 	cudaError_t cudaStatus;
 
@@ -348,18 +188,6 @@ cudaError_t reset_quadtree_with_cuda(float2* pos, float* mass, int* child)
 		goto Error;
 	}
 
-	//cudaStatus = cudaMalloc((void**) &dev_num_particles, sizeof(int));
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaMalloc failed!");
-	//	goto Error;
-	//}
-
-	//cudaStatus = cudaMalloc((void**) &dev_num_nodes, sizeof(int));
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaMalloc failed!");
-	//	goto Error;
-	//}
-
 	// Copy input vectors and variabels from host memory to GPU buffers.
 	cudaStatus = cudaMemcpy(dev_pos, pos, NUM_NODES * sizeof(float2), cudaMemcpyHostToDevice);
 	if (cudaStatus != cudaSuccess) {
@@ -379,21 +207,9 @@ cudaError_t reset_quadtree_with_cuda(float2* pos, float* mass, int* child)
 		goto Error;
 	}
 
-	//cudaStatus = cudaMemset(dev_num_particles, NUM_PARTICLES, sizeof(int));
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaMemSet failed!");
-	//	goto Error;
-	//}
-
-	//cudaStatus = cudaMemset(dev_num_nodes, NUM_NODES, sizeof(int));
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaMemSet failed!");
-	//	goto Error;
-	//}
-
 	// Launch a kernel on the GPU with one thread for each element.
-	int NUM_BLOCKS = (NUM_NODES + BLOCKSIZE_HOST - 1) / BLOCKSIZE_HOST;
-	reset_quadtree_kernel <<<NUM_BLOCKS, BLOCKSIZE_HOST >>>(dev_pos, dev_mass, dev_child, NUM_PARTICLES, NUM_NODES);
+	int NUM_BLOCKS = (NUM_NODES + BLOCKSIZE - 1) / BLOCKSIZE;
+	reset_quadtree_kernel <<<NUM_BLOCKS, BLOCKSIZE >>>(dev_pos, dev_mass, dev_child, NUM_PARTICLES, NUM_NODES);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -435,8 +251,6 @@ Error:
 	cudaFree(dev_pos);
 	cudaFree(dev_mass);
 	cudaFree(dev_child);
-	//cudaFree(dev_num_particles);
-	//cudaFree(dev_num_nodes);
 
 	return cudaStatus;
 }
@@ -449,8 +263,6 @@ cudaError_t compute_forces_and_integrate_with_cuda(float dt, float2* pos, float2
 	float2 *dev_acc = 0;
 	float *dev_mass = 0;
 	int *dev_child = 0;
-	//int *dev_num_particles = 0;
-	//int *dev_num_nodes = 0;
 	float4 *dev_min_max_extents = 0;
 
 	cudaError_t cudaStatus;
@@ -485,18 +297,6 @@ cudaError_t compute_forces_and_integrate_with_cuda(float dt, float2* pos, float2
 		fprintf(stderr, "cudaMalloc failed!");
 		goto Error;
 	}
-
-	//cudaStatus = cudaMalloc((void**)&dev_num_particles, sizeof(int));
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaMalloc failed!");
-	//	goto Error;
-	//}
-
-	//cudaStatus = cudaMalloc((void**)&dev_num_nodes, sizeof(int));
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaMalloc failed!");
-	//	goto Error;
-	//}
 
 	cudaStatus = cudaMalloc((void**)&dev_min_max_extents, sizeof(float4));
 	if (cudaStatus != cudaSuccess) {
@@ -535,18 +335,6 @@ cudaError_t compute_forces_and_integrate_with_cuda(float dt, float2* pos, float2
 		goto Error;
 	}
 
-	//cudaStatus = cudaMemset(dev_num_particles, NUM_PARTICLES, sizeof(int));
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaMemSet failed!");
-	//	goto Error;
-	//}
-
-	//cudaStatus = cudaMemset(dev_num_nodes, NUM_NODES, sizeof(int));
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "cudaMemSet failed!");
-	//	goto Error;
-	//}
-
 	cudaStatus = cudaMemcpy(dev_min_max_extents, min_max_extents, sizeof(float4), cudaMemcpyHostToDevice);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "cudaMemcpy failed!");
@@ -555,8 +343,8 @@ cudaError_t compute_forces_and_integrate_with_cuda(float dt, float2* pos, float2
 
 	// COMPUTE FORCES FROM EACH NODE ON PARTICLES
 	// Launch a kernel on the GPU with one thread for each element.
-	int NUM_BLOCKS = (NUM_PARTICLES + BLOCKSIZE_HOST - 1) / BLOCKSIZE_HOST;
-	compute_force_from_nodes_kernel <<<NUM_BLOCKS, BLOCKSIZE_HOST >>>(dev_pos, dev_acc, dev_mass, dev_child, dev_min_max_extents, NUM_PARTICLES);
+	int NUM_BLOCKS = (NUM_PARTICLES + BLOCKSIZE - 1) / BLOCKSIZE;
+	compute_force_from_nodes_kernel <<<NUM_BLOCKS, BLOCKSIZE >>>(dev_pos, dev_acc, dev_mass, dev_child, dev_min_max_extents, NUM_PARTICLES);
 	
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -575,8 +363,8 @@ cudaError_t compute_forces_and_integrate_with_cuda(float dt, float2* pos, float2
 
 	// INTEGRATE POSITIONS AND VELOCITIES
 	// Launch a kernel on the GPU with one thread for each element.
-	NUM_BLOCKS = (NUM_PARTICLES + BLOCKSIZE_HOST - 1) / BLOCKSIZE_HOST;
-	integrate_kernel<<<NUM_BLOCKS, BLOCKSIZE_HOST >>>(dt, dev_pos, dev_vel, dev_acc, NUM_PARTICLES);
+	NUM_BLOCKS = (NUM_PARTICLES + BLOCKSIZE - 1) / BLOCKSIZE;
+	integrate_kernel<<<NUM_BLOCKS, BLOCKSIZE >>>(dt, dev_pos, dev_vel, dev_acc, NUM_PARTICLES);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -613,8 +401,6 @@ Error:
 	cudaFree(dev_vel);
 	cudaFree(dev_mass);
 	cudaFree(dev_child);
-	//cudaFree(dev_num_particles);
-	//cudaFree(dev_num_nodes);
 	cudaFree(dev_min_max_extents);
 
 	return cudaStatus;

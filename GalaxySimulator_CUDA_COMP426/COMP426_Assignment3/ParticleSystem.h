@@ -29,6 +29,5 @@ public:
 	ParticleSystem(unsigned int numParticles);
 	void draw(int galaxyIndex, GLenum drawMode = GL_POINTS);
 	void performComputations();
-	void integrate(double dt, Particle* particle);
 	~ParticleSystem();
 };

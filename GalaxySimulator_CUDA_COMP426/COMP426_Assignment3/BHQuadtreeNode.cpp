@@ -142,15 +142,15 @@ BHQuadtreeNode::Quadrant BHQuadtreeNode::getQuadrant(const Particle * const part
 	if (!quadrants[quadIndex])
 	{
 		// Create the missing quadrant node
-		auto count = ++nodeID_counter;
+		auto nodeID = ++nodeID_counter;
 		switch (quadrant)
 		{
-		case Quadrant::NE: quadrants[quadIndex].reset(new BHQuadtreeNode(count, center_, max_, this)); break;
-		case Quadrant::NW: quadrants[quadIndex].reset(new BHQuadtreeNode(count, make_float2(min_.x, center_.y),
+		case Quadrant::NE: quadrants[quadIndex].reset(new BHQuadtreeNode(nodeID, center_, max_, this)); break;
+		case Quadrant::NW: quadrants[quadIndex].reset(new BHQuadtreeNode(nodeID, make_float2(min_.x, center_.y),
 			make_float2(center_.x, max_.y),
 			this)); break;
-		case Quadrant::SW: quadrants[quadIndex].reset(new BHQuadtreeNode(count, min_, center_, this)); break;
-		case Quadrant::SE: quadrants[quadIndex].reset(new BHQuadtreeNode(count, make_float2(center_.x, min_.y),
+		case Quadrant::SW: quadrants[quadIndex].reset(new BHQuadtreeNode(nodeID, min_, center_, this)); break;
+		case Quadrant::SE: quadrants[quadIndex].reset(new BHQuadtreeNode(nodeID, make_float2(center_.x, min_.y),
 			make_float2(max_.x, center_.y),
 			this)); break;
 		default: assert(false); //TODO: handle error
@@ -160,6 +160,9 @@ BHQuadtreeNode::Quadrant BHQuadtreeNode::getQuadrant(const Particle * const part
 	return quadrant;
 }
 
+/**
+ Copies the data from each particle into arrays that track center_of_mass, position and children of each internal node
+*/
 void BHQuadtreeNode::copyToArray(float* mass, int* child, float2* pos, int depth)
 {
 	mass[nodeID_ + NUM_PARTICLES] = mass_;
@@ -182,65 +185,4 @@ void BHQuadtreeNode::copyToArray(float* mass, int* child, float2* pos, int depth
 			child[4 * (nodeID_ + NUM_PARTICLES) + i] = quadrants[i]->getParticle()->getIdx();
 		}
 	}
-}
-
-/**
-* Compute gravitational attraction of particle p2 on p1 and return p1's acceleration
-*/
-float2 BHQuadtreeNode::computeGravityAcc(const Particle * const p1, const Particle * const p2)
-{
-	float2 acc;
-
-	float2 difference = p2->getPos() - p1->getPos();
-	double dist = length(difference) + SOFTENER; // Distance between both points
-	if (dist > 0)
-	{
-		const double g = GRAVITATIONAL_CONSTANT * p2->getMass() / (dist*dist*dist);
-		acc.x = difference.x * g;
-		acc.y = difference.y * g;
-	}
-	else
-	{
-		// If the two particles are in the same point, return 0
-		acc.x = acc.y = 0;
-	}
-
-	return acc;
-}
-
-// Calculate acceleration on target_p due to force from this node's subtree on target_p
-float2 BHQuadtreeNode::computeForceFromNode(const Particle * const target_p)
-{
-	float2 acc = make_float2(0.0f, 0.0f);
-
-	if (numParticles_ == 1)
-	{
-		acc = computeGravityAcc(target_p, particle_);
-	}
-	else
-	{
-		float2 difference = centerOfMass_ - target_p->getPos();
-		double dist = length(difference) + 0.001; // Distance between particle and node's CoM
-		double nodeRadius = max_.x - min_.x;
-		if (glm::abs(nodeRadius / dist) <= THETA)
-		{
-			// The particle is far enough to approximate the node as a single point
-			const double g = GRAVITATIONAL_CONSTANT * mass_ / (dist*dist*dist);
-			acc = difference * g;
-		}
-		else
-		{
-			// Recursively add acceleration due to child quadrants
-			for (int i = 0; i < quadrants.size(); i++)
-			{
-				if (quadrants[i])
-				{
-					const auto accDueToQuad = quadrants[i]->computeForceFromNode(target_p);
-					acc += accDueToQuad;
-				}
-			}
-		}
-	}
-
-	return acc;
 }

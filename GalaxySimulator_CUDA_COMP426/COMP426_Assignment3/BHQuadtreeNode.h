@@ -32,7 +32,6 @@ private:
 	bool isLeaf() const;
 
 	Quadrant getQuadrant(const Particle* const particle);
-	float2 computeGravityAcc(const Particle* const p1, const Particle* const p2);
 
 public:
 	static int nodeID_counter;
@@ -43,8 +42,6 @@ public:
 	void insertParticle(Particle* const particle);
 	void computeMassDistribution();
 	void copyToArray(float * mass, int * child, float2 * pos, int depth = 0);
-	float2 computeForceFromNode(const Particle* const target_p);
-
 
 	//Getters and Setters
 	int getNodeID() const { return nodeID_; }

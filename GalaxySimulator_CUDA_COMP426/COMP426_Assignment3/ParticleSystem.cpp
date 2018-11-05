@@ -153,7 +153,7 @@ void ParticleSystem::performComputations()
 	t1 = Clock::now();
 #endif 
 
-	// 4b. Copy values computed for each node into an array so it can be used with CUDA
+	// 5. Copy values computed for each node into an array so it can be used with CUDA
 	cudaError_t cudaStatus = reset_quadtree_with_cuda(pos_, mass_, child_);
 	if (cudaStatus != cudaSuccess) {
 		fprintf(stderr, "compute_forces_and_integrate_with_cuda failed!");
@@ -161,23 +161,12 @@ void ParticleSystem::performComputations()
 	}
 	root.copyToArray(mass_, child_, pos_);
 
-	// 5. Compute acceleration of each particle due to external forces
-	//for (size_t i = 0; i < particles_.size(); ++i)
-	//{
-	//	particles_[i].setAcc(root.computeForceFromNode(&particles_[i]));
-	//}
-
-
 #ifdef PROFILE
-	std::cout << "5. compute acceleration: "
+	std::cout << "5. copy quadtree values into arrays: "
 		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
 		<< " microseconds" << std::endl;
 	t1 = Clock::now();
 #endif
-
-	// 6. Update the position and velocity of each particle
-	//for (auto& particle : particles_)
-	//	integrate(TIME_STEP, &particle);
 
 	cudaStatus = compute_forces_and_integrate_with_cuda(TIME_STEP, pos_, vel_, acc_, mass_, child_, &min_max_extents);
 	if (cudaStatus != cudaSuccess) {
@@ -186,19 +175,10 @@ void ParticleSystem::performComputations()
 	}
 
 #ifdef PROFILE
-	std::cout << "6. integrate: "
+	std::cout << "6. compute forces and integrate: "
 		<< std::chrono::duration_cast<std::chrono::microseconds>(Clock::now() - t1).count()
 		<< " microseconds" << std::endl;
 #endif
-}
-
-void ParticleSystem::integrate(double dt, Particle* particle)
-{
-	// Integrate velocity and position of all particles
-	const auto& acc = particle->getAcc();
-	particle->setVel(particle->getVel() +acc*dt);
-	const auto& vel = particle->getVel();
-	particle->setPos(particle->getPos() + vel*dt);
 }
 
 ParticleSystem::~ParticleSystem()
