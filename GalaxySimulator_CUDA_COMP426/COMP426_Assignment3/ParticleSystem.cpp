@@ -3,7 +3,6 @@
 #include <limits>
 
 #include "ParticleSystem.h"
-#include "SimulationConstants.h"
 
 // #define PROFILE true // Uncomment to profile
 #ifdef PROFILE
@@ -51,11 +50,11 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 
 		// Create particles
 		galaxies_[i].particles.reserve(galaxySize);
-		for (unsigned int j = 0; j < galaxySize; j++)
+		for (int j = 0; j < galaxySize; j++)
 		{
 			++idx;
 			mass_[idx] = PARTICLE_MASS;
-			particles_.push_back(Particle(idx, j, mass_, pos_, vel_, acc_));
+			particles_.push_back( Particle(idx, j, mass_, pos_, vel_, acc_) );
 			galaxies_[i].particles.push_back(&particles_.back());
 
 			// Calculate point's position relative to galaxy center
@@ -118,7 +117,7 @@ void ParticleSystem::performComputations()
 		if (pos.y > max.y)
 			max.y = pos.y;
 	}
-
+	float4 min_max_extents = make_float4(minmax.first.x, minmax.first.y, minmax.second.x, minmax.second.y);
 
 #ifdef PROFILE
 	std::cout << "1. Min Max calculations: "
@@ -128,7 +127,8 @@ void ParticleSystem::performComputations()
 #endif
 
 	// 2. Create root for quad tree
-	BHQuadtreeNode root(minmax.first, minmax.second,nullptr);
+	BHQuadtreeNode::nodeID_counter = 0;
+	BHQuadtreeNode root(0, minmax.first, minmax.second,nullptr);
 
 	// 3. Build tree by inserting all the particles
 	for (auto& particle : particles_)
@@ -153,11 +153,19 @@ void ParticleSystem::performComputations()
 	t1 = Clock::now();
 #endif 
 
-	// 5. Compute acceleration of each particle due to external forces
-	for (size_t i = 0; i < particles_.size(); ++i)
-	{
-		particles_[i].setAcc(root.computeForceFromNode(&particles_[i]));
+	// 4b. Copy values computed for each node into an array so it can be used with CUDA
+	cudaError_t cudaStatus = reset_quadtree_with_cuda(pos_, mass_, child_);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "compute_forces_and_integrate_with_cuda failed!");
+		return;
 	}
+	root.copyToArray(mass_, child_, pos_);
+
+	// 5. Compute acceleration of each particle due to external forces
+	//for (size_t i = 0; i < particles_.size(); ++i)
+	//{
+	//	particles_[i].setAcc(root.computeForceFromNode(&particles_[i]));
+	//}
 
 
 #ifdef PROFILE
@@ -168,14 +176,14 @@ void ParticleSystem::performComputations()
 #endif
 
 	// 6. Update the position and velocity of each particle
-	for (auto& particle : particles_)
-		integrate(TIME_STEP, &particle);
+	//for (auto& particle : particles_)
+	//	integrate(TIME_STEP, &particle);
 
-	//cudaError_t cudaStatus = integrate_with_cuda(TIME_STEP, pos_, vel_, acc_, NUM_PARTICLES);
-	//if (cudaStatus != cudaSuccess) {
-	//	fprintf(stderr, "addWithCuda failed!");
-	//	return;
-	//}
+	cudaStatus = compute_forces_and_integrate_with_cuda(TIME_STEP, pos_, vel_, acc_, mass_, child_, &min_max_extents);
+	if (cudaStatus != cudaSuccess) {
+		fprintf(stderr, "compute_forces_and_integrate_with_cuda failed!");
+		return;
+	}
 
 #ifdef PROFILE
 	std::cout << "6. integrate: "

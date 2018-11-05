@@ -3,10 +3,12 @@
 #include "BHQuadtreeNode.h"
 #include "SimulationConstants.h"
 
-BHQuadtreeNode::BHQuadtreeNode(const float2& min,
-	const float2 & max,
-	BHQuadtreeNode * parent)
-	: centerOfMass_(make_float2(0.0f, 0.0f)),
+int BHQuadtreeNode::nodeID_counter;
+
+BHQuadtreeNode::BHQuadtreeNode(int nodeID, const float2& min, const float2 & max, BHQuadtreeNode * parent)
+	: 
+	nodeID_(nodeID),
+	centerOfMass_(make_float2(0.0f, 0.0f)),
 	min_(min),
 	max_(max),
 	center_(make_float2(min.x + (max.x - min.x) * 0.5f, min.y + (max.y - min.y) * 0.5f)),
@@ -93,6 +95,7 @@ void BHQuadtreeNode::computeMassDistribution()
 	}
 }
 
+
 bool BHQuadtreeNode::isRoot() const
 {
 	return parent_ == nullptr;
@@ -139,14 +142,15 @@ BHQuadtreeNode::Quadrant BHQuadtreeNode::getQuadrant(const Particle * const part
 	if (!quadrants[quadIndex])
 	{
 		// Create the missing quadrant node
+		auto count = ++nodeID_counter;
 		switch (quadrant)
 		{
-		case Quadrant::NE: quadrants[quadIndex].reset(new BHQuadtreeNode(center_, max_, this)); break;
-		case Quadrant::NW: quadrants[quadIndex].reset(new BHQuadtreeNode(make_float2(min_.x, center_.y),
+		case Quadrant::NE: quadrants[quadIndex].reset(new BHQuadtreeNode(count, center_, max_, this)); break;
+		case Quadrant::NW: quadrants[quadIndex].reset(new BHQuadtreeNode(count, make_float2(min_.x, center_.y),
 			make_float2(center_.x, max_.y),
 			this)); break;
-		case Quadrant::SW: quadrants[quadIndex].reset(new BHQuadtreeNode(min_, center_, this)); break;
-		case Quadrant::SE: quadrants[quadIndex].reset(new BHQuadtreeNode(make_float2(center_.x, min_.y),
+		case Quadrant::SW: quadrants[quadIndex].reset(new BHQuadtreeNode(count, min_, center_, this)); break;
+		case Quadrant::SE: quadrants[quadIndex].reset(new BHQuadtreeNode(count, make_float2(center_.x, min_.y),
 			make_float2(max_.x, center_.y),
 			this)); break;
 		default: assert(false); //TODO: handle error
@@ -154,6 +158,30 @@ BHQuadtreeNode::Quadrant BHQuadtreeNode::getQuadrant(const Particle * const part
 	}
 
 	return quadrant;
+}
+
+void BHQuadtreeNode::copyToArray(float* mass, int* child, float2* pos, int depth)
+{
+	mass[nodeID_ + NUM_PARTICLES] = mass_;
+	pos[nodeID_ + NUM_PARTICLES] = centerOfMass_;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (!quadrants[i])
+		{
+			continue;
+		}
+
+		// If the quadrant isn't null, then copy its values to the node array
+		if (quadrants[i]->getNumParticles() > 1)
+		{
+			child[4 * (nodeID_ + NUM_PARTICLES) + i] = quadrants[i]->getNodeID() + NUM_PARTICLES;
+			quadrants[i]->copyToArray(mass, child, pos, depth+1);
+		}
+		else
+		{
+			child[4 * (nodeID_ + NUM_PARTICLES) + i] = quadrants[i]->getParticle()->getIdx();
+		}
+	}
 }
 
 /**

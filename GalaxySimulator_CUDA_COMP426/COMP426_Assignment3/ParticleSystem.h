@@ -5,13 +5,11 @@
 #include "Particle.h"
 #include "ParticleDisplay.h"
 #include "BHQuadtreeNode.h"
+#include "SimulationConstants.h"
 
 class ParticleSystem
 {
 private:
-
-	static constexpr int NUM_GALAXIES = 2;
-	static constexpr int NUM_PARTICLES = 5000;
 
 	// particles and display for two galaxies
 	struct Galaxy
@@ -21,8 +19,9 @@ private:
 	};
 	std::array<Galaxy, NUM_GALAXIES > galaxies_;
 	std::vector<Particle> particles_;
-	double mass_[NUM_PARTICLES];
-	float2 pos_[NUM_PARTICLES];
+	float mass_[NUM_NODES];
+	int child_[NUM_NODES * 4];
+	float2 pos_[NUM_NODES];
 	float2 vel_[NUM_PARTICLES];
 	float2 acc_[NUM_PARTICLES];
 

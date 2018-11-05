@@ -18,7 +18,8 @@ private:
 		NONE
 	};
 
-	double mass_;
+	int nodeID_;
+	float mass_;
 	float2 centerOfMass_;
 	float2 min_; // Lower left edge of node
 	float2 max_; // Upper right edge of node
@@ -34,20 +35,25 @@ private:
 	float2 computeGravityAcc(const Particle* const p1, const Particle* const p2);
 
 public:
+	static int nodeID_counter;
 
-	BHQuadtreeNode(const float2& min, const float2& max, BHQuadtreeNode* parent = nullptr);
+	BHQuadtreeNode(int nodeID, const float2& min, const float2& max, BHQuadtreeNode* parent = nullptr);
 	std::array<std::unique_ptr<BHQuadtreeNode>, 4> quadrants;
 
 	void insertParticle(Particle* const particle);
 	void computeMassDistribution();
+	void copyToArray(float * mass, int * child, float2 * pos, int depth = 0);
 	float2 computeForceFromNode(const Particle* const target_p);
 
 
 	//Getters and Setters
-	double getMass() const { return mass_; }
+	int getNodeID() const { return nodeID_; }
+	float getMass() const { return mass_; }
 	const float2& getMin() const { return min_; }
 	const float2& getMax() const { return max_; }
 	const float2& getCenter() const { return center_; }
 	const float2& getCenterOfMass() const { return centerOfMass_; }
+	const unsigned int getNumParticles() const { return numParticles_; }
+	const Particle* getParticle() const { return particle_; }
 
 };
