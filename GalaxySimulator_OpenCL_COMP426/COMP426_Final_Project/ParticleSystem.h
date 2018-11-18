@@ -29,7 +29,7 @@ private:
 	OpenCLManager openCLManager;
 
 public:
-	ParticleSystem(unsigned int numParticles);
+	ParticleSystem(HGLRC& openGLContext, HDC& hdc);
 	void draw(int galaxyIndex, GLenum drawMode = GL_POINTS);
 	void performComputations();
 	void resetQuadtreeSerial();

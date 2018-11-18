@@ -90,5 +90,8 @@
     <None Include="bruteForceKernel.cl">
       <Filter>Kernels</Filter>
     </None>
+    <None Include="vboKernel.cl">
+      <Filter>Kernels</Filter>
+    </None>
   </ItemGroup>
 </Project>

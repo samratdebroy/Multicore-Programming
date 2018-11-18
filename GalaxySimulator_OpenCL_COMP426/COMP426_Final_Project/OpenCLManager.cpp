@@ -1,12 +1,16 @@
 #include "OpenCLManager.h"
 #include "SimulationConstants.h"
 
+#include "CL/cl_gl.h"
+#include "glad/glad.h"
+
 #include <stdio.h>
 #include <stdlib.h>
+#include<iostream>
 #include <fstream>
 #include <sstream>
 
-void OpenCLManager::init()
+void OpenCLManager::init(HGLRC& openGLContext, HDC& hdc)
 {
 
 	// Get platform and device information
@@ -25,18 +29,66 @@ void OpenCLManager::init()
 	std::vector<cl_device_id > cpu_device_ids(deviceIdCount);
 	ciErrNum = clGetDeviceIDs(platform_ids[1], CL_DEVICE_TYPE_CPU, deviceIdCount, cpu_device_ids.data(), &deviceIdCount);
 	// TODO: Should check both types of devices and handle dynamically instead of assuming one GPU and one CPU device
-	cl_device_id device_id = gpu_device_ids[0];
+	device_id = cpu_device_ids[0];
 
+#ifdef OPENGL_INTEROP
+	// Check if any of the GPU devices support context sharing with OpenGL
+	OpenGLInteropSupported = false;
+	for (auto& gpu_device : gpu_device_ids)
+	{
+		// Get the number of extensions supported by this device
+		size_t extensionSize;
+		ciErrNum = clGetDeviceInfo(gpu_device, CL_DEVICE_EXTENSIONS, 0, NULL, &extensionSize);
+		if (extensionSize > 0)
+		{
+			// Get the list of extensions
+			char* extensions = (char*)malloc(extensionSize);
+			ciErrNum = clGetDeviceInfo(gpu_device, CL_DEVICE_EXTENSIONS, extensionSize, extensions, &extensionSize);
+			std::string stdDevString(extensions);
+			free(extensions);
+
+			auto match_found = stdDevString.find("cl_khr_gl_sharing");
+			if (match_found != std::string::npos)
+			{
+				// This device supports OpenGL interop, set it as device_id
+				OpenGLInteropSupported = true;
+				device_id = gpu_device;
+				break;
+			}
+			else
+			{
+				std::cout << "No device found that supports OpenCL/OpenGL Interrop context sharing" << std::endl;
+			}
+		}
+	}
+#endif
 	// Print info
 	char device_string[1024];
 	clGetDeviceInfo(device_id, CL_DEVICE_NAME, sizeof(device_string), &device_string, NULL);
-	printf("%s\n", device_string);
+	std::cout << device_string << std::endl;
 	char cOCLVersion[32];
 	clGetDeviceInfo(device_id, CL_DEVICE_VERSION, sizeof(cOCLVersion), &cOCLVersion, 0);
-	printf("%s\n", cOCLVersion);
+	std::cout << cOCLVersion << std::endl;
 
-	// Create the OpenCL context on a GPU device
-	cxMainContext = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ciErrNum);
+	// If OpenGL context sharing is supported, then get the appropriate context properties
+	if (OpenGLInteropSupported)
+	{
+		cl_context_properties props[] =
+		{ CL_CONTEXT_PLATFORM, (cl_context_properties)platform_ids[0] /*OpenCL GPU platform*/,
+		  CL_GL_CONTEXT_KHR,   (cl_context_properties)openGLContext	/*OpenGL context*/,
+		  CL_WGL_HDC_KHR,     (cl_context_properties)hdc	/*HDC used to create the OpenGL context*/,
+		  NULL
+		};
+
+		// Create the OpenCL context on a GPU device
+		cxMainContext = clCreateContext(props, 1, &device_id, NULL, NULL, &ciErrNum);
+	}
+	else
+	{
+		// Create the OpenCL context on a GPU device
+		cxMainContext = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ciErrNum);
+	}
+
 
 	// Create a command-queue
 	cqCommandQue = clCreateCommandQueue(cxMainContext, device_id, 0, NULL);
@@ -49,39 +101,102 @@ void OpenCLManager::init()
 	memChild = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(int) * NUM_NODES * 4, NULL, &ciErrNum);
 	memMinmax = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(cl_float4), NULL, &ciErrNum);
 
-	// Allocate constant buffer memory objects
-	int num_particles[1] = { NUM_PARTICLES };
-	int num_nodes[1] = { NUM_NODES };
-	float  time_step[1] = { TIME_STEP };
-	memNumNodes = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(int), NULL, &ciErrNum);
-	memNumParticles = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(int), NULL, &ciErrNum);
-	memTimeStep = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(float), NULL, &ciErrNum);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memNumNodes, CL_TRUE, 0, sizeof(int), &num_nodes, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memNumParticles, CL_TRUE, 0, sizeof(int), &num_particles, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memTimeStep, CL_TRUE, 0, sizeof(float), &time_step, 0, NULL, NULL);
+	// Create constant scalar objects to be used as scalar arguments in the kernel
+	static const cl_int num_particles = NUM_PARTICLES;
+	static const cl_int num_nodes = NUM_NODES;
+	static const cl_float  time_step = TIME_STEP;
 
-	// Create the programs for each kernel
-
-	/*std::vector<cl_mem*> computeForcesArgs = { &memPos,&memAcc, &memMass, &memChild, &memMinmax, &memNumParticles };
-	computeForces = Kernel(cxMainContext, &device_id, "computeForcesKernel.cl", "compute_force_from_nodes_kernel", computeForcesArgs);
-	
-	std::vector<cl_mem*> resetQuadtreeArgs = { &memPos, &memMass, &memChild, &memNumParticles, &memNumNodes };
-	resetQuadtreeFields = Kernel(cxMainContext, &device_id, "resetQuadtreeKernel.cl", "reset_quadtree_kernel", resetQuadtreeArgs);*/
-
-	std::vector<cl_mem*> integrateArgs = { &memPos,&memVel, &memAcc, &memNumParticles , &memTimeStep};
-	integrate.reset(new Kernel(cxMainContext, &device_id, "integrateKernel.cl", "integrate_kernel", integrateArgs));
-
-	std::vector<cl_mem*> bruteForceArgs = { &memPos, &memAcc, &memMass, &memNumParticles };
+	// Create the programs/kernel for each kernel and set the arguments
+	// Compute Forces Kernel
+#ifdef BRUTE_FORCE
+	std::vector<cl_mem*> bruteForceArgs = { &memPos, &memAcc, &memMass };
 	bruteForce.reset(new Kernel(cxMainContext, &device_id, "bruteForceKernel.cl", "brute_force_kernel", bruteForceArgs));
+	bruteForce->setKernelScalarArg(3, num_particles);
+#else
+	std::vector<cl_mem*> computeForcesArgs = { &memPos,&memAcc, &memMass, &memChild, &memMinmax};
+	computeForces.reset(new Kernel(cxMainContext, &device_id, "computeForcesKernel.cl", "compute_force_from_nodes_kernel", computeForcesArgs));
+	computeForces->setKernelScalarArg(5, num_particles);
+#endif
+
+	// Reset Quadtree Fields Kernel
+	std::vector<cl_mem*> resetQuadtreeArgs = { &memPos, &memMass, &memChild};
+	resetQuadtreeFields.reset(new Kernel(cxMainContext, &device_id, "resetQuadtreeKernel.cl", "reset_quadtree_kernel", resetQuadtreeArgs));
+	resetQuadtreeFields->setKernelScalarArg(3, num_particles);
+	resetQuadtreeFields->setKernelScalarArg(4, num_nodes);
+
+	// Integrate Kernel
+	std::vector<cl_mem*> integrateArgs = { &memPos,&memVel, &memAcc};
+	integrate.reset(new Kernel(cxMainContext, &device_id, "integrateKernel.cl", "integrate_kernel", integrateArgs));
+	integrate->setKernelScalarArg(3, num_particles);
+	integrate->setKernelScalarArg(4, time_step);
+
+	// VBO update Kernel
+	if (OpenGLInteropSupported) 
+	{
+		// Initialize the Kernel
+		std::vector<cl_mem*> updateVBOArgs = { &memPos };
+		updateVBOValues.reset(new Kernel(cxMainContext, &device_id, "vboKernel.cl", "vbo_kernel", updateVBOArgs));
+		updateVBOValues->setKernelScalarArg(2, num_particles);
+	}
 
 	// set work-item dimensions
 	szGlobalWorkSize[0] = NUM_PARTICLES;
 	szLocalWorkSize[0] = BLOCKSIZE;
 }
 
+void OpenCLManager::initVBO(const std::vector<cl_GLuint>& vbos)
+{
+	if (OpenGLInteropSupported)
+	{
+		memVBO.reserve(vbos.size());
+		for (const auto& vbo : vbos)
+		{
+			// OpenGL/OpenCL Interop VBO
+			if (OpenGLInteropSupported)
+			{
+				memVBO.push_back(std::make_unique<cl_mem>(clCreateFromGLBuffer(cxMainContext, CL_MEM_WRITE_ONLY, vbo, &ciErrNum)));
+			}
+		}
+	}
+}
+
+void OpenCLManager::updateVBO(const std::vector<std::pair<int,int>>& offsetsAndSize, int maxExtentRadius)
+{
+	if (OpenGLInteropSupported)
+	{
+		cl_float extent = maxExtentRadius;
+		updateVBOValues->setKernelScalarArg(4, extent);
+
+		glFinish();
+		std::vector<cl_event> events(offsetsAndSize.size());
+		std::vector<cl_event> more_events(offsetsAndSize.size() + 1);
+		for (int i = 0; i < offsetsAndSize.size(); ++i)
+		{
+			// Map OpenGL buffer for writing from OpenCL
+			ciErrNum = clEnqueueAcquireGLObjects(cqCommandQue, 1, memVBO[i].get(), 0, 0, &events[i]);
+		}
+		for (int i = 0; i < offsetsAndSize.size(); ++i)
+		{
+			// Execute kernels to update VBOs
+			size_t globalWorkSize[1] = { ((offsetsAndSize[i].second+szLocalWorkSize[0]-1)/(szLocalWorkSize[0]))*(szLocalWorkSize[0]) };
+			updateVBOValues->setKernelArg(1, memVBO[i].get());
+			cl_int offset = offsetsAndSize[i].first;
+			updateVBOValues->setKernelScalarArg(3, offset);
+			ciErrNum |= clEnqueueNDRangeKernel(cqCommandQue, updateVBOValues->kernel, 1, NULL, globalWorkSize, szLocalWorkSize, events.size(), events.data(), &more_events[0]);
+		}
+		for (int i = 0; i < offsetsAndSize.size(); ++i)
+		{
+			// Unmap buffer objects
+			ciErrNum = clEnqueueReleaseGLObjects(cqCommandQue, 1, memVBO[i].get(), 1, &more_events[i], &more_events[i+1]);
+		}
+		ciErrNum = clFinish(cqCommandQue);
+
+	}
+}
+
 void OpenCLManager::computeForcesAndIntegrate(cl_float2 * pos, cl_float2 * vel, cl_float2 * acc, float * mass, int * child, cl_float4 * min_max_extents)
 {
-
+	glFinish();
 	// Write input
 	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 0, NULL, NULL);
 	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 0, NULL, NULL);
@@ -148,6 +263,10 @@ OpenCLManager::~OpenCLManager()
 	clReleaseMemObject(memMass);
 	clReleaseMemObject(memChild);
 	clReleaseMemObject(memMinmax);
+	for (auto& memvbo : memVBO)
+	{
+		clReleaseMemObject(*memvbo.release());
+	}
 	clReleaseCommandQueue(cqCommandQue);
 	clReleaseContext(cxMainContext);
 }
@@ -178,7 +297,7 @@ OpenCLManager::Kernel::Kernel(cl_context& context, cl_device_id* device_id, cons
 		clGetProgramBuildInfo(program, *device_id, CL_PROGRAM_BUILD_LOG, log_size, log, NULL);
 
 		// Print the log
-		printf("%s\n", log);
+		std::cout << log << std::endl;
 		
 		free(log);
 	}
@@ -188,7 +307,7 @@ OpenCLManager::Kernel::Kernel(cl_context& context, cl_device_id* device_id, cons
 	// Set the kernel argument values
 	for (int i = 0; i < args.size(); ++i)
 	{
-		errNumber |= clSetKernelArg(kernel, i, sizeof(cl_mem), (void*)args[i]);
+		setKernelArg(i, args[i]);
 	}
 }
 

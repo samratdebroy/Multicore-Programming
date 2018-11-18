@@ -66,7 +66,9 @@ int main()
 	shader.UseProgram();
 
 	// Create particles and particle display system
-	ParticleSystem particleSystem(1);
+	auto glcontext = wglGetCurrentContext();
+	auto HDC = wglGetCurrentDC();
+	ParticleSystem particleSystem(glcontext, HDC);
 
 	// Perform computations and update particles in a infinite loop in parallel to main thread
 	std::mutex mutex;

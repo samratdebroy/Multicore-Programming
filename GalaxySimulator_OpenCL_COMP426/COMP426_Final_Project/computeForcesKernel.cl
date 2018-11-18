@@ -6,7 +6,7 @@
 #define SOFTENER 10000000.0f
 
 // Calculate acceleration on target_p due to force from this node's subtree on target_p
-__kernel void compute_force_from_nodes_kernel(__global float2* pos, __global float2* acc, __global float* mass, __global int* child, __global float4* min_max_extents, __global int* num_particles)
+__kernel void compute_force_from_nodes_kernel(__global float2* pos, __global float2* acc, __global float* mass, __global int* child, __global float4* min_max_extents, int num_particles)
 {
 	int particleID = get_global_id(0);
 	const int stride = get_global_size(0);
@@ -28,7 +28,7 @@ __kernel void compute_force_from_nodes_kernel(__global float2* pos, __global flo
 	int stack_offset = -1;
 	for (int i = 0; i < 4; ++i)
 	{
-		int root_nodeID = num_particles[0] * 4;
+		int root_nodeID = num_particles * 4;
 		if (child[i + root_nodeID] != -1)
 		{
 			++stack_offset;
@@ -36,7 +36,7 @@ __kernel void compute_force_from_nodes_kernel(__global float2* pos, __global flo
 	}
 
 	// Compute acceleration for every particle assigned to this block
-	while (particleID < num_particles[0]) {
+	while (particleID < num_particles) {
 
 		// TODO: this should be returned from a sorted ID list
 		// Ensuring that particles computed in the same warp are close to each other
@@ -54,7 +54,7 @@ __kernel void compute_force_from_nodes_kernel(__global float2* pos, __global flo
 			for (int i = 0; i < 4; ++i)
 			{
 				// Init the stacks for the root node's children
-				int root_nodeID = num_particles[0] * 4;
+				int root_nodeID = num_particles * 4;
 				if (child[i + root_nodeID] != -1)
 				{
 					stack[stack_startIdx + childID] = child[i + root_nodeID];
@@ -88,7 +88,7 @@ __kernel void compute_force_from_nodes_kernel(__global float2* pos, __global flo
 					float squared_dist = dot(difference_vector, difference_vector) + SOFTENER; // dx*dx + dy*dy + softener
 
 																							   // Compute acceleration only if the child is a particle (ie. a leaf node) or if it meets the cutoff criterion
-					if (childID < num_particles[0] || work_group_all(next_quadrant_size <= squared_dist))
+					if (childID < num_particles || work_group_all(next_quadrant_size <= squared_dist))
 					{
 						float inv_dist = rsqrt(squared_dist); // 1/sqrt(squared_dist)
 

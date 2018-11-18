@@ -11,10 +11,10 @@
 typedef std::chrono::high_resolution_clock Clock;
 #endif
 
-ParticleSystem::ParticleSystem(unsigned int numParticles)
+ParticleSystem::ParticleSystem(HGLRC& openGLContext, HDC& hdc)
 {
 	// TODO: remove hack
-	numParticles = NUM_PARTICLES;
+	auto numParticles = NUM_PARTICLES;
 
 	particles_.reserve(numParticles);
 
@@ -74,11 +74,21 @@ ParticleSystem::ParticleSystem(unsigned int numParticles)
 		}
 
 		// Connect these particles to the Particle Displayer
-		galaxies_[i].particleDisplay.init(galaxies_[i].particles);
+		galaxies_[i].particleDisplay.init(galaxies_[i].particles, 1 + idx - galaxies_[i].particles.size());
 	}
 
 	// Initialize the openCL kernels and devices
-	openCLManager.init();
+	openCLManager.init(openGLContext, hdc);
+	if (openCLManager.isOpenGLInteropSupported())
+	{
+		std::vector<cl_GLuint> vbos;
+		vbos.reserve(galaxies_.size());
+		for (auto& galaxy : galaxies_)
+		{
+			vbos.push_back(galaxy.particleDisplay.getVBO());
+		}
+		openCLManager.initVBO(vbos);
+	}
 
 	// Make sure computations are performed at least once after initialization
 	performComputations();
@@ -88,7 +98,19 @@ void ParticleSystem::draw(int galaxyIndex, GLenum drawMode)
 {
 	const auto& xExtent = SIM_SIZE;
 	const auto& yExtent = SIM_SIZE;
-	galaxies_[galaxyIndex].particleDisplay.updateParticles(galaxies_[galaxyIndex].particles, xExtent, yExtent);
+	std::vector<std::pair<int, int>> offsetAndSizeVec;
+	if (openCLManager.isOpenGLInteropSupported())
+	{
+		for (auto& galaxy : galaxies_)
+		{
+			offsetAndSizeVec.push_back(galaxy.particleDisplay.getOffsetAndSize());
+		}
+		openCLManager.updateVBO(offsetAndSizeVec, xExtent);
+	}
+	else
+	{
+		galaxies_[galaxyIndex].particleDisplay.updateParticles(galaxies_[galaxyIndex].particles, xExtent, yExtent);
+	}
 	galaxies_[galaxyIndex].particleDisplay.draw(drawMode);
 }
 
@@ -153,7 +175,7 @@ void ParticleSystem::performComputations()
 #endif 
 
 	// 5. Copy values computed for each node into an array so it can be used with CUDA
-	//openCLManager.resetQuadtree(pos_, mass_, child_);
+	//openCLManager.resetQuadtree(pos_, mass_, child_); // <-- SLOWS THINGS DOWN
 	resetQuadtreeSerial();
 	root.copyToArray(mass_, child_, pos_);
 
@@ -164,8 +186,12 @@ void ParticleSystem::performComputations()
 	t1 = Clock::now();
 #endif
 
-	//openCLManager.computeForcesAndIntegrate(pos_, vel_, acc_, mass_, child_, &min_max_extents);
+#ifdef BRUTE_FORCE
 	openCLManager.computeForcesAndIntegrate(pos_, vel_, acc_, mass_);
+#else
+	openCLManager.computeForcesAndIntegrate(pos_, vel_, acc_, mass_, child_, &min_max_extents);
+#endif
+	
 
 #ifdef PROFILE
 	std::cout << "6. compute forces and integrate: "

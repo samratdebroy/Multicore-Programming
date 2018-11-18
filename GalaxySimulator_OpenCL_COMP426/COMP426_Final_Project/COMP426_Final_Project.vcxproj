@@ -45,6 +45,7 @@
     <None Include="resetQuadtreeKernel.cl" />
     <None Include="shaders\fragment.shader" />
     <None Include="shaders\vertex.shader" />
+    <None Include="vboKernel.cl" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

@@ -1,4 +1,7 @@
 #pragma once
+// #define BRUTE_FORCE // Set this to use brute-force calculation of force between particles instead of barnes-hut
+#define OPENGL_INTEROP
+
 // TODO: Should probably put these constants in a namespace
 constexpr double SIM_SIZE = 1.0e7; // Vertical and Horizontal extent of the simulation screen in units of length
 constexpr double MAX_GALAXY_RADIUS = SIM_SIZE * 0.3;

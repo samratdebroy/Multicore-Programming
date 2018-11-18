@@ -2,8 +2,9 @@
 
 ParticleDisplay::ParticleDisplay(){}
 
-void ParticleDisplay::init(const std::vector<Particle*>& particles)
+void ParticleDisplay::init(const std::vector<Particle*>& particles, int offset)
 {
+	offset_ = offset;
 	vertices_.resize(particles.size());
 
 	// Setup Vertex Array Object and Vertex Buffer Object
@@ -25,7 +26,7 @@ void ParticleDisplay::updateParticles(const std::vector<Particle*>& particles, d
 	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
 	glBindVertexArray(VAO_);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO_);
-	glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(glm::vec2), &vertices_.front(), GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, vertices_.size() * sizeof(float) * 2, &vertices_.front(), GL_DYNAMIC_DRAW);
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
 	glEnableVertexAttribArray(0);
 
@@ -44,4 +45,9 @@ void ParticleDisplay::draw(GLenum drawMode)
 	glBindVertexArray(VAO_);
 	glDrawArrays(drawMode, 0, vertices_.size());
 	glBindVertexArray(0);
+}
+
+std::pair<int, int> ParticleDisplay::getOffsetAndSize() const
+{
+	return std::pair<int, int>(offset_, vertices_.size());
 }
