@@ -1,12 +1,13 @@
 #pragma once
 // #define BRUTE_FORCE // Set this to use brute-force calculation of force between particles instead of barnes-hut
+//#define PROFILE // Uncomment to profile
 #define OPENGL_INTEROP
 
 // TODO: Should probably put these constants in a namespace
 constexpr double SIM_SIZE = 1.0e7; // Vertical and Horizontal extent of the simulation screen in units of length
 constexpr double MAX_GALAXY_RADIUS = SIM_SIZE * 0.3;
 constexpr double MIN_GALAXY_RADIUS = MAX_GALAXY_RADIUS * 0.05;
-constexpr double PARTICLE_MASS = 1.0e15;
+constexpr double PARTICLE_MASS = 0.5e15;
 constexpr double GRAVITATIONAL_CONSTANT = 6.67408e-11;
 constexpr double THETA = 1.0;
 constexpr double SOFTENER = 0.0001*(MAX_GALAXY_RADIUS)*(MAX_GALAXY_RADIUS);

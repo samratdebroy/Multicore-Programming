@@ -26,6 +26,8 @@ private:
 	float2 pos_[NUM_NODES];
 	float2 vel_[NUM_PARTICLES];
 	float2 acc_[NUM_PARTICLES];
+	cl_float4 min_max_extents[1] = { { FLT_MAX, FLT_MAX , -FLT_MAX, -FLT_MAX } };
+	cl_float4 getMinMaxSerial();
 	OpenCLManager openCLManager;
 
 public:

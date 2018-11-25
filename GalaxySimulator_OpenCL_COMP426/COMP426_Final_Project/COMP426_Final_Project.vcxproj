@@ -30,6 +30,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="BHQuadtreeNode.h" />
+    <ClInclude Include="OpenCLHelper.h" />
     <ClInclude Include="OpenCLManager.h" />
     <ClInclude Include="Particle.h" />
     <ClInclude Include="ParticleDisplay.h" />
@@ -42,6 +43,7 @@
     <None Include="computeForcesKernel.cl" />
     <None Include="integrateKernel.cl" />
     <None Include="kernels.cl" />
+    <None Include="minmaxKernel.cl" />
     <None Include="resetQuadtreeKernel.cl" />
     <None Include="shaders\fragment.shader" />
     <None Include="shaders\vertex.shader" />

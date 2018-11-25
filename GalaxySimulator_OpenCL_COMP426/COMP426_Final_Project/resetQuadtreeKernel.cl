@@ -1,5 +1,5 @@
 // Reset the QuadTree for a new set of computations
-__kernel void reset_quadtree_kernel(__global float2* pos, __global float* mass, __global int* child, int num_particles, int num_nodes)
+__kernel void reset_quadtree_kernel(__global float2* pos, __global float* mass, __global int* child, const int num_particles, const int num_nodes)
 {
 	int nodeID = get_global_id(0);
 	int stride = get_global_size(0);

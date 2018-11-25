@@ -67,6 +67,9 @@
     <ClInclude Include="SimulationConstants.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="OpenCLHelper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="kernels.cl">
@@ -91,6 +94,9 @@
       <Filter>Kernels</Filter>
     </None>
     <None Include="vboKernel.cl">
+      <Filter>Kernels</Filter>
+    </None>
+    <None Include="minmaxKernel.cl">
       <Filter>Kernels</Filter>
     </None>
   </ItemGroup>

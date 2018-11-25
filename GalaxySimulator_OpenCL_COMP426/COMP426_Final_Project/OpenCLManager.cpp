@@ -1,5 +1,6 @@
 #include "OpenCLManager.h"
 #include "SimulationConstants.h"
+#include "OpenCLHelper.h"
 
 #include "CL/cl_gl.h"
 #include "glad/glad.h"
@@ -15,21 +16,31 @@ void OpenCLManager::init(HGLRC& openGLContext, HDC& hdc)
 
 	// Get platform and device information
 	cl_uint platformIdCount = 0;
-	ciErrNum = clGetPlatformIDs(0, NULL, &platformIdCount);
+	errorNum_ = clGetPlatformIDs(0, NULL, &platformIdCount);
+	oclHelper::clCheckError(errorNum_);
 	std::vector<cl_platform_id > platform_ids(platformIdCount);
-	ciErrNum = clGetPlatformIDs(platformIdCount, platform_ids.data(), NULL);
+	errorNum_ = clGetPlatformIDs(platformIdCount, platform_ids.data(), NULL);
+	oclHelper::clCheckError(errorNum_);
 
 	// Get GPU devices
 	cl_uint deviceIdCount = 0;
-	ciErrNum = clGetDeviceIDs(platform_ids[0], CL_DEVICE_TYPE_GPU, 0, NULL, &deviceIdCount);
+	errorNum_ = clGetDeviceIDs(platform_ids[0], CL_DEVICE_TYPE_GPU, 0, NULL, &deviceIdCount);
+	oclHelper::clCheckError(errorNum_);
+
 	std::vector<cl_device_id > gpu_device_ids(deviceIdCount);
-	ciErrNum = clGetDeviceIDs(platform_ids[0], CL_DEVICE_TYPE_GPU, deviceIdCount, gpu_device_ids.data(), &deviceIdCount);
+	errorNum_ = clGetDeviceIDs(platform_ids[0], CL_DEVICE_TYPE_GPU, deviceIdCount, gpu_device_ids.data(), &deviceIdCount);
+	oclHelper::clCheckError(errorNum_);
+
 	// Get CPU devices
-	ciErrNum = clGetDeviceIDs(platform_ids[1], CL_DEVICE_TYPE_CPU, 0, NULL, &deviceIdCount);
+	errorNum_ = clGetDeviceIDs(platform_ids[1], CL_DEVICE_TYPE_CPU, 0, NULL, &deviceIdCount);
+	oclHelper::clCheckError(errorNum_);
+
 	std::vector<cl_device_id > cpu_device_ids(deviceIdCount);
-	ciErrNum = clGetDeviceIDs(platform_ids[1], CL_DEVICE_TYPE_CPU, deviceIdCount, cpu_device_ids.data(), &deviceIdCount);
+	errorNum_ = clGetDeviceIDs(platform_ids[1], CL_DEVICE_TYPE_CPU, deviceIdCount, cpu_device_ids.data(), &deviceIdCount);
+	oclHelper::clCheckError(errorNum_);
+
 	// TODO: Should check both types of devices and handle dynamically instead of assuming one GPU and one CPU device
-	device_id = cpu_device_ids[0];
+	cpuDeviceID_ = cpu_device_ids[0];
 
 #ifdef OPENGL_INTEROP
 	// Check if any of the GPU devices support context sharing with OpenGL
@@ -38,12 +49,16 @@ void OpenCLManager::init(HGLRC& openGLContext, HDC& hdc)
 	{
 		// Get the number of extensions supported by this device
 		size_t extensionSize;
-		ciErrNum = clGetDeviceInfo(gpu_device, CL_DEVICE_EXTENSIONS, 0, NULL, &extensionSize);
+		errorNum_ = clGetDeviceInfo(gpu_device, CL_DEVICE_EXTENSIONS, 0, NULL, &extensionSize);
+		oclHelper::clCheckError(errorNum_);
+
 		if (extensionSize > 0)
 		{
 			// Get the list of extensions
 			char* extensions = (char*)malloc(extensionSize);
-			ciErrNum = clGetDeviceInfo(gpu_device, CL_DEVICE_EXTENSIONS, extensionSize, extensions, &extensionSize);
+			errorNum_ = clGetDeviceInfo(gpu_device, CL_DEVICE_EXTENSIONS, extensionSize, extensions, &extensionSize);
+			oclHelper::clCheckError(errorNum_);
+
 			std::string stdDevString(extensions);
 			free(extensions);
 
@@ -52,7 +67,7 @@ void OpenCLManager::init(HGLRC& openGLContext, HDC& hdc)
 			{
 				// This device supports OpenGL interop, set it as device_id
 				OpenGLInteropSupported = true;
-				device_id = gpu_device;
+				gpuDeviceID_ = gpu_device;
 				break;
 			}
 			else
@@ -62,13 +77,18 @@ void OpenCLManager::init(HGLRC& openGLContext, HDC& hdc)
 		}
 	}
 #endif
+
 	// Print info
-	char device_string[1024];
-	clGetDeviceInfo(device_id, CL_DEVICE_NAME, sizeof(device_string), &device_string, NULL);
-	std::cout << device_string << std::endl;
-	char cOCLVersion[32];
-	clGetDeviceInfo(device_id, CL_DEVICE_VERSION, sizeof(cOCLVersion), &cOCLVersion, 0);
-	std::cout << cOCLVersion << std::endl;
+	std::vector<decltype(gpuDeviceID_)> deviceIDs = { cpuDeviceID_, gpuDeviceID_ };
+	for (auto& device_id : deviceIDs)
+	{
+		char device_string[1024];
+		clGetDeviceInfo(device_id, CL_DEVICE_NAME, sizeof(device_string), &device_string, NULL);
+		std::cout << device_string << std::endl;
+		char openCLVersion[32];
+		clGetDeviceInfo(device_id, CL_DEVICE_VERSION, sizeof(openCLVersion), &openCLVersion, 0);
+		std::cout << openCLVersion << std::endl;
+	}
 
 	// If OpenGL context sharing is supported, then get the appropriate context properties
 	if (OpenGLInteropSupported)
@@ -81,25 +101,40 @@ void OpenCLManager::init(HGLRC& openGLContext, HDC& hdc)
 		};
 
 		// Create the OpenCL context on a GPU device
-		cxMainContext = clCreateContext(props, 1, &device_id, NULL, NULL, &ciErrNum);
+		gpuContext_ = clCreateContext(props, 1, &gpuDeviceID_, NULL, NULL, &errorNum_);
+		oclHelper::clCheckError(errorNum_);
 	}
 	else
 	{
 		// Create the OpenCL context on a GPU device
-		cxMainContext = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ciErrNum);
+		gpuContext_ = clCreateContext(NULL, 1, &gpuDeviceID_, NULL, NULL, &errorNum_);
+		oclHelper::clCheckError(errorNum_);
 	}
 
+	// Create the OpenCL context on a CPU device
+	cpuContext_ = clCreateContext(NULL, 1, &cpuDeviceID_, NULL, NULL, &errorNum_);
 
-	// Create a command-queue
-	cqCommandQue = clCreateCommandQueue(cxMainContext, device_id, 0, NULL);
+	// Create the command-queues
+	gpu_command_queue_ = clCreateCommandQueue(gpuContext_, gpuDeviceID_, 0, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+
+	cpu_command_queue_ = clCreateCommandQueue(cpuContext_, cpuDeviceID_, 0, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
 
 	// Allocate all buffer memory objects
-	memPos = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(cl_float2) * NUM_NODES, NULL, &ciErrNum);
-	memVel = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(cl_float2) * NUM_PARTICLES, NULL, &ciErrNum);
-	memAcc = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(cl_float2) * NUM_PARTICLES, NULL, &ciErrNum);
-	memMass = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(float) * NUM_NODES, NULL, &ciErrNum);
-	memChild = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(int) * NUM_NODES * 4, NULL, &ciErrNum);
-	memMinmax = clCreateBuffer(cxMainContext, CL_MEM_READ_WRITE, sizeof(cl_float4), NULL, &ciErrNum);
+	// GPU
+	memPos = clCreateBuffer(gpuContext_, CL_MEM_READ_WRITE, sizeof(cl_float2) * NUM_NODES, NULL, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+	memVel = clCreateBuffer(gpuContext_, CL_MEM_READ_WRITE, sizeof(cl_float2) * NUM_PARTICLES, NULL, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+	memAcc = clCreateBuffer(gpuContext_, CL_MEM_READ_WRITE, sizeof(cl_float2) * NUM_PARTICLES, NULL, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+	memMass = clCreateBuffer(gpuContext_, CL_MEM_READ_WRITE, sizeof(float) * NUM_NODES, NULL, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+	memChild = clCreateBuffer(gpuContext_, CL_MEM_READ_WRITE, sizeof(int) * NUM_NODES * 4, NULL, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+	memMinmax = clCreateBuffer(gpuContext_, CL_MEM_READ_WRITE, sizeof(cl_float4), NULL, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
 
 	// Create constant scalar objects to be used as scalar arguments in the kernel
 	static const cl_int num_particles = NUM_PARTICLES;
@@ -110,23 +145,17 @@ void OpenCLManager::init(HGLRC& openGLContext, HDC& hdc)
 	// Compute Forces Kernel
 #ifdef BRUTE_FORCE
 	std::vector<cl_mem*> bruteForceArgs = { &memPos, &memAcc, &memMass };
-	bruteForce.reset(new Kernel(cxMainContext, &device_id, "bruteForceKernel.cl", "brute_force_kernel", bruteForceArgs));
+	bruteForce.reset(new Kernel(mainContext_, &gpuDeviceID_, "bruteForceKernel.cl", "brute_force_kernel", bruteForceArgs));
 	bruteForce->setKernelScalarArg(3, num_particles);
 #else
 	std::vector<cl_mem*> computeForcesArgs = { &memPos,&memAcc, &memMass, &memChild, &memMinmax};
-	computeForces.reset(new Kernel(cxMainContext, &device_id, "computeForcesKernel.cl", "compute_force_from_nodes_kernel", computeForcesArgs));
+	computeForces.reset(new Kernel(gpuContext_, &gpuDeviceID_, "computeForcesKernel.cl", "compute_force_from_nodes_kernel", computeForcesArgs));
 	computeForces->setKernelScalarArg(5, num_particles);
 #endif
 
-	// Reset Quadtree Fields Kernel
-	std::vector<cl_mem*> resetQuadtreeArgs = { &memPos, &memMass, &memChild};
-	resetQuadtreeFields.reset(new Kernel(cxMainContext, &device_id, "resetQuadtreeKernel.cl", "reset_quadtree_kernel", resetQuadtreeArgs));
-	resetQuadtreeFields->setKernelScalarArg(3, num_particles);
-	resetQuadtreeFields->setKernelScalarArg(4, num_nodes);
-
 	// Integrate Kernel
 	std::vector<cl_mem*> integrateArgs = { &memPos,&memVel, &memAcc};
-	integrate.reset(new Kernel(cxMainContext, &device_id, "integrateKernel.cl", "integrate_kernel", integrateArgs));
+	integrate.reset(new Kernel(gpuContext_, &gpuDeviceID_, "integrateKernel.cl", "integrate_kernel", integrateArgs));
 	integrate->setKernelScalarArg(3, num_particles);
 	integrate->setKernelScalarArg(4, time_step);
 
@@ -135,13 +164,14 @@ void OpenCLManager::init(HGLRC& openGLContext, HDC& hdc)
 	{
 		// Initialize the Kernel
 		std::vector<cl_mem*> updateVBOArgs = { &memPos };
-		updateVBOValues.reset(new Kernel(cxMainContext, &device_id, "vboKernel.cl", "vbo_kernel", updateVBOArgs));
+		updateVBOValues.reset(new Kernel(gpuContext_, &gpuDeviceID_, "vboKernel.cl", "vbo_kernel", updateVBOArgs));
 		updateVBOValues->setKernelScalarArg(2, num_particles);
 	}
 
 	// set work-item dimensions
-	szGlobalWorkSize[0] = NUM_PARTICLES;
-	szLocalWorkSize[0] = BLOCKSIZE;
+	globalWorkSize_[0] = NUM_PARTICLES;
+	gpuLocalWorkSize_[0] = BLOCKSIZE;
+	cpuLocalWorkSize_[0] = BLOCKSIZE;
 }
 
 void OpenCLManager::initVBO(const std::vector<cl_GLuint>& vbos)
@@ -154,7 +184,8 @@ void OpenCLManager::initVBO(const std::vector<cl_GLuint>& vbos)
 			// OpenGL/OpenCL Interop VBO
 			if (OpenGLInteropSupported)
 			{
-				memVBO.push_back(std::make_unique<cl_mem>(clCreateFromGLBuffer(cxMainContext, CL_MEM_WRITE_ONLY, vbo, &ciErrNum)));
+				memVBO.push_back(std::make_unique<cl_mem>(clCreateFromGLBuffer(gpuContext_, CL_MEM_WRITE_ONLY, vbo, &errorNum_)));
+				oclHelper::clCheckError(errorNum_);
 			}
 		}
 	}
@@ -173,24 +204,27 @@ void OpenCLManager::updateVBO(const std::vector<std::pair<int,int>>& offsetsAndS
 		for (int i = 0; i < offsetsAndSize.size(); ++i)
 		{
 			// Map OpenGL buffer for writing from OpenCL
-			ciErrNum = clEnqueueAcquireGLObjects(cqCommandQue, 1, memVBO[i].get(), 0, 0, &events[i]);
+			errorNum_ = clEnqueueAcquireGLObjects(gpu_command_queue_, 1, memVBO[i].get(), 0, 0, &events[i]);
+			oclHelper::clCheckError(errorNum_);
 		}
 		for (int i = 0; i < offsetsAndSize.size(); ++i)
 		{
 			// Execute kernels to update VBOs
-			size_t globalWorkSize[1] = { ((offsetsAndSize[i].second+szLocalWorkSize[0]-1)/(szLocalWorkSize[0]))*(szLocalWorkSize[0]) };
+			size_t globalWorkSize[1] = { ((offsetsAndSize[i].second+gpuLocalWorkSize_[0]-1)/(gpuLocalWorkSize_[0]))*(gpuLocalWorkSize_[0]) };
 			updateVBOValues->setKernelArg(1, memVBO[i].get());
 			cl_int offset = offsetsAndSize[i].first;
 			updateVBOValues->setKernelScalarArg(3, offset);
-			ciErrNum |= clEnqueueNDRangeKernel(cqCommandQue, updateVBOValues->kernel, 1, NULL, globalWorkSize, szLocalWorkSize, events.size(), events.data(), &more_events[0]);
+			errorNum_ |= clEnqueueNDRangeKernel(gpu_command_queue_, updateVBOValues->kernel, 1, NULL, globalWorkSize, gpuLocalWorkSize_, events.size(), events.data(), &more_events[0]);
+			oclHelper::clCheckError(errorNum_);
 		}
 		for (int i = 0; i < offsetsAndSize.size(); ++i)
 		{
 			// Unmap buffer objects
-			ciErrNum = clEnqueueReleaseGLObjects(cqCommandQue, 1, memVBO[i].get(), 1, &more_events[i], &more_events[i+1]);
+			errorNum_ = clEnqueueReleaseGLObjects(gpu_command_queue_, 1, memVBO[i].get(), 1, &more_events[i], &more_events[i+1]);
+			oclHelper::clCheckError(errorNum_);
 		}
-		ciErrNum = clFinish(cqCommandQue);
-
+		errorNum_ = clFinish(gpu_command_queue_);
+		oclHelper::clCheckError(errorNum_);
 	}
 }
 
@@ -198,55 +232,109 @@ void OpenCLManager::computeForcesAndIntegrate(cl_float2 * pos, cl_float2 * vel, 
 {
 	glFinish();
 	// Write input
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memAcc, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), acc, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memMass, CL_TRUE, 0, NUM_NODES * sizeof(float), mass, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memChild, CL_TRUE, 0, NUM_NODES * 4 * sizeof(int), child, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memMinmax, CL_TRUE, 0, sizeof(cl_float4), min_max_extents, 0, NULL, NULL);
+	errorNum_ = clEnqueueWriteBuffer(gpu_command_queue_, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 0, NULL, NULL);
+	errorNum_ |= clEnqueueWriteBuffer(gpu_command_queue_, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 0, NULL, NULL);
+	errorNum_ |= clEnqueueWriteBuffer(gpu_command_queue_, memAcc, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), acc, 0, NULL, NULL);
+	errorNum_ |= clEnqueueWriteBuffer(gpu_command_queue_, memMass, CL_TRUE, 0, NUM_NODES * sizeof(float), mass, 0, NULL, NULL);
+	errorNum_ |= clEnqueueWriteBuffer(gpu_command_queue_, memChild, CL_TRUE, 0, NUM_NODES * 4 * sizeof(int), child, 0, NULL, NULL);
+	errorNum_ |= clEnqueueWriteBuffer(gpu_command_queue_, memMinmax, CL_TRUE, 0, sizeof(cl_float4), min_max_extents, 0, NULL, NULL);
+	oclHelper::clCheckError(errorNum_);
+
 	// Execute kernel
 	cl_event computeForcesEvent, integrateEvent;
-	ciErrNum = clEnqueueNDRangeKernel(cqCommandQue, computeForces->kernel, 1, NULL, szGlobalWorkSize, szLocalWorkSize, 0, NULL, &computeForcesEvent);
-	ciErrNum = clEnqueueNDRangeKernel(cqCommandQue, integrate->kernel, 1, NULL, szGlobalWorkSize, szLocalWorkSize, 1, &computeForcesEvent, &integrateEvent);
+	errorNum_ = clEnqueueNDRangeKernel(gpu_command_queue_, computeForces->kernel, 1, NULL, globalWorkSize_, gpuLocalWorkSize_, 0, NULL, &computeForcesEvent);
+	errorNum_ |= clEnqueueNDRangeKernel(gpu_command_queue_, integrate->kernel, 1, NULL, globalWorkSize_, gpuLocalWorkSize_, 1, &computeForcesEvent, &integrateEvent);
+	oclHelper::clCheckError(errorNum_);
+
 	// Read output
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 1, &integrateEvent, NULL);
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 1, &integrateEvent, NULL);
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memAcc, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), acc, 1, &integrateEvent, NULL);
+	errorNum_ = clEnqueueReadBuffer(gpu_command_queue_, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 1, &integrateEvent, NULL);
+	errorNum_ |= clEnqueueReadBuffer(gpu_command_queue_, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 1, &integrateEvent, NULL);
+	errorNum_ |= clEnqueueReadBuffer(gpu_command_queue_, memAcc, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), acc, 1, &integrateEvent, NULL);
+	oclHelper::clCheckError(errorNum_);
 }
 
 void OpenCLManager::computeForcesAndIntegrate(cl_float2 * pos, cl_float2 * vel, cl_float2 * acc, float * mass)
 {
 	// Write input
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memAcc, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), acc, 0, NULL, NULL);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memMass, CL_TRUE, 0, NUM_NODES * sizeof(float), mass, 0, NULL, NULL);
+	errorNum_ = clEnqueueWriteBuffer(gpu_command_queue_, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 0, NULL, NULL);
+	errorNum_ |= clEnqueueWriteBuffer(gpu_command_queue_, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 0, NULL, NULL);
+	errorNum_ |= clEnqueueWriteBuffer(gpu_command_queue_, memAcc, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), acc, 0, NULL, NULL);
+	errorNum_ |= clEnqueueWriteBuffer(gpu_command_queue_, memMass, CL_TRUE, 0, NUM_NODES * sizeof(float), mass, 0, NULL, NULL);
+	oclHelper::clCheckError(errorNum_);
+
 	// Execute kernel
 	cl_event event;
-	ciErrNum = clEnqueueNDRangeKernel(cqCommandQue, bruteForce->kernel, 1, NULL, szGlobalWorkSize, szLocalWorkSize, 0, NULL, &event);
+	errorNum_ = clEnqueueNDRangeKernel(gpu_command_queue_, bruteForce->kernel, 1, NULL, globalWorkSize_, gpuLocalWorkSize_, 0, NULL, &event);
 	cl_event event2;
-	ciErrNum = clEnqueueNDRangeKernel(cqCommandQue, integrate->kernel, 1, NULL, szGlobalWorkSize, szLocalWorkSize, 1, &event, &event2);
+	errorNum_ |= clEnqueueNDRangeKernel(gpu_command_queue_, integrate->kernel, 1, NULL, globalWorkSize_, gpuLocalWorkSize_, 1, &event, &event2);
+	oclHelper::clCheckError(errorNum_);
+
 	// Read output
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 1, &event2, NULL);
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 1, &event2, NULL);
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memAcc, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), acc, 1, &event2, NULL);
+	errorNum_ = clEnqueueReadBuffer(gpu_command_queue_, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 1, &event2, NULL);
+	errorNum_ |= clEnqueueReadBuffer(gpu_command_queue_, memVel, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), vel, 1, &event2, NULL);
+	errorNum_ |= clEnqueueReadBuffer(gpu_command_queue_, memAcc, CL_TRUE, 0, NUM_PARTICLES * sizeof(cl_float2), acc, 1, &event2, NULL);
+	oclHelper::clCheckError(errorNum_);
 }
+
+void OpenCLManager::initCPUKernels(cl_float2 * pos, float * mass, int * child, cl_float4* minmax)
+{
+	// CPU memory elems
+	cpu_memPos = clCreateBuffer(cpuContext_, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, sizeof(cl_float2) * NUM_NODES, pos, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+	cpu_memMass = clCreateBuffer(cpuContext_, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, sizeof(float) * NUM_NODES, mass, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+	cpu_memChild = clCreateBuffer(cpuContext_, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, sizeof(int) * NUM_NODES * 4, child, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+	cpu_memMinMax = clCreateBuffer(cpuContext_, CL_MEM_READ_WRITE, sizeof(cl_float4), NULL, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+
+	// Reset Quadtree Fields Kernel
+	std::vector<cl_mem*> resetQuadtreeArgs = { &cpu_memPos, &cpu_memMass, &cpu_memChild };
+	resetQuadtreeFields.reset(new Kernel(cpuContext_, &cpuDeviceID_, "resetQuadtreeKernel.cl", "reset_quadtree_kernel", resetQuadtreeArgs));
+	static const cl_int num_particles = NUM_PARTICLES;
+	static const cl_int num_nodes = NUM_NODES;
+	resetQuadtreeFields->setKernelScalarArg(3, num_particles);
+	resetQuadtreeFields->setKernelScalarArg(4, num_nodes);
+
+	// MinMax Kernel
+	std::vector<cl_mem*> minMaxArgs = { &cpu_memPos, &cpu_memMinMax};
+	minMax.reset(new Kernel(cpuContext_, &cpuDeviceID_, "minmaxKernel.cl", "minmax_kernel", minMaxArgs));
+	minMax->setKernelScalarArg(2, num_particles);
+}
+
 
 void OpenCLManager::resetQuadtree(cl_float2 * pos, float * mass, int * child)
 {
-	cl_event event[3];
 
-	// Write input
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 0, NULL, &event[0]);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memChild, CL_TRUE, 0, NUM_NODES * 4 * sizeof(int), child, 0, NULL, &event[1]);
-	ciErrNum = clEnqueueWriteBuffer(cqCommandQue, memMass, CL_TRUE, 0, NUM_NODES * sizeof(float), mass, 0, NULL, &event[2]);
 	// Execute kernel
 	cl_event kernel_event;
-	ciErrNum = clEnqueueNDRangeKernel(cqCommandQue, resetQuadtreeFields->kernel, 1, NULL, szGlobalWorkSize, szLocalWorkSize, 3, event, &kernel_event);
+	errorNum_ = clEnqueueNDRangeKernel(cpu_command_queue_, resetQuadtreeFields->kernel, 1, NULL, globalWorkSize_, cpuLocalWorkSize_, 0, NULL, &kernel_event);
+	oclHelper::clCheckError(errorNum_);
+
 	// Read output
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 1, &kernel_event, NULL);
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memChild, CL_TRUE, 0, NUM_NODES * 4 * sizeof(int), child, 1, &kernel_event, NULL);
-	ciErrNum = clEnqueueReadBuffer(cqCommandQue, memMass, CL_TRUE, 0, NUM_NODES * sizeof(float), mass, 1, &kernel_event, NULL);
+	clEnqueueMapBuffer(cpu_command_queue_, cpu_memPos, CL_TRUE, CL_MAP_READ, 0, NUM_NODES * sizeof(cl_float2), 1, &kernel_event, NULL, &errorNum_);
+	clEnqueueMapBuffer(cpu_command_queue_, cpu_memChild, CL_TRUE, CL_MAP_READ, 0, NUM_NODES * 4 * sizeof(int), 1, &kernel_event, NULL, &errorNum_);
+	clEnqueueMapBuffer(cpu_command_queue_, cpu_memMass, CL_TRUE, CL_MAP_READ, 0, NUM_NODES * sizeof(float), 1, &kernel_event, NULL, &errorNum_);
+	oclHelper::clCheckError(errorNum_);
+}
+
+void OpenCLManager::getMinMax(cl_float2 * pos, cl_float4* minmax)
+{
+	// Write input
+	errorNum_ = clEnqueueWriteBuffer(cpu_command_queue_, cpu_memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 0, NULL, NULL);
+	errorNum_ = clEnqueueWriteBuffer(cpu_command_queue_, cpu_memMinMax, CL_TRUE, 0, sizeof(cl_float4), minmax, 0, NULL, NULL);
+	oclHelper::clCheckError(errorNum_);
+
+	// Execute kernel
+	cl_event kernel_event;
+	static const size_t size[1] = { 1 };
+	errorNum_ = clEnqueueNDRangeKernel(cpu_command_queue_, minMax->kernel, 1, NULL, size, size, 0, NULL, &kernel_event);
+	oclHelper::clCheckError(errorNum_);
+
+	// Read output
+	errorNum_ = clEnqueueReadBuffer(cpu_command_queue_, cpu_memMinMax, CL_TRUE, 0, sizeof(cl_float4), minmax, 1, &kernel_event, NULL);
+	errorNum_ = clEnqueueReadBuffer(cpu_command_queue_, cpu_memPos, CL_TRUE, 0, NUM_NODES * sizeof(cl_float2), pos, 1, &kernel_event, NULL);
+	oclHelper::clCheckError(errorNum_);
 }
 
 OpenCLManager::OpenCLManager()
@@ -263,12 +351,18 @@ OpenCLManager::~OpenCLManager()
 	clReleaseMemObject(memMass);
 	clReleaseMemObject(memChild);
 	clReleaseMemObject(memMinmax);
+	clReleaseMemObject(cpu_memPos);
+	clReleaseMemObject(cpu_memMass);
+	clReleaseMemObject(cpu_memChild);
+	clReleaseMemObject(cpu_memMinMax);
 	for (auto& memvbo : memVBO)
 	{
 		clReleaseMemObject(*memvbo.release());
 	}
-	clReleaseCommandQueue(cqCommandQue);
-	clReleaseContext(cxMainContext);
+	clReleaseCommandQueue(gpu_command_queue_);
+	clReleaseCommandQueue(cpu_command_queue_);
+	clReleaseContext(gpuContext_);
+	clReleaseContext(cpuContext_);
 }
 
 OpenCLManager::Kernel::Kernel()

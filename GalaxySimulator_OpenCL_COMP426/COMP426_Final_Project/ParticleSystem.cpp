@@ -4,7 +4,6 @@
 
 #include "ParticleSystem.h"
 
-// #define PROFILE true // Uncomment to profile
 #ifdef PROFILE
 #include <iostream>
 #include <chrono>
@@ -89,6 +88,7 @@ ParticleSystem::ParticleSystem(HGLRC& openGLContext, HDC& hdc)
 		}
 		openCLManager.initVBO(vbos);
 	}
+	openCLManager.initCPUKernels(pos_, mass_, child_, min_max_extents);
 
 	// Make sure computations are performed at least once after initialization
 	performComputations();
@@ -120,25 +120,13 @@ void ParticleSystem::performComputations()
 	auto t1 = Clock::now();
 #endif
 	// 1. Find the Min/Max values of the frame
-	std::pair<float2, float2> minmax;
-	minmax.first = { FLT_MAX, FLT_MAX };
-	minmax.second = { -FLT_MAX, -FLT_MAX };
-	for (auto& particle : particles_)
-	{
-		auto& min = minmax.first;
-		auto& max = minmax.second;
 
-		const auto& pos = particle.getPos();
-		if (pos.x < min.x)
-			min.x = pos.x;
-		if (pos.y < min.y)
-			min.y = pos.y;
-		if (pos.x > max.x)
-			max.x = pos.x;
-		if (pos.y > max.y)
-			max.y = pos.y;
-	}
-	float4 min_max_extents = { minmax.first.x, minmax.first.y, minmax.second.x, minmax.second.y};
+	//min_max_extents[0] = { FLT_MAX, FLT_MAX , -FLT_MAX, -FLT_MAX };
+	min_max_extents[0] = getMinMaxSerial();
+	openCLManager.getMinMax(pos_, min_max_extents);
+	std::pair<float2, float2> minmax;
+	minmax.first = min_max_extents[0].lo;
+	minmax.second = min_max_extents[0].hi;
 
 #ifdef PROFILE
 	std::cout << "1. Min Max calculations: "
@@ -149,7 +137,7 @@ void ParticleSystem::performComputations()
 
 	// 2. Create root for quad tree
 	BHQuadtreeNode::nodeID_counter = 0;
-	BHQuadtreeNode root(0, minmax.first, minmax.second,nullptr);
+	BHQuadtreeNode root(0, minmax.first, minmax.second, nullptr);
 
 	// 3. Build tree by inserting all the particles
 	for (auto& particle : particles_)
@@ -174,9 +162,9 @@ void ParticleSystem::performComputations()
 	t1 = Clock::now();
 #endif 
 
-	// 5. Copy values computed for each node into an array so it can be used with CUDA
-	//openCLManager.resetQuadtree(pos_, mass_, child_); // <-- SLOWS THINGS DOWN
-	resetQuadtreeSerial();
+	// 5. Copy values computed for each node into an array so it can be used with OpenCL
+	openCLManager.resetQuadtree(pos_, mass_, child_);
+	// resetQuadtreeSerial();
 	root.copyToArray(mass_, child_, pos_);
 
 #ifdef PROFILE
@@ -189,7 +177,7 @@ void ParticleSystem::performComputations()
 #ifdef BRUTE_FORCE
 	openCLManager.computeForcesAndIntegrate(pos_, vel_, acc_, mass_);
 #else
-	openCLManager.computeForcesAndIntegrate(pos_, vel_, acc_, mass_, child_, &min_max_extents);
+	openCLManager.computeForcesAndIntegrate(pos_, vel_, acc_, mass_, child_, &min_max_extents[0]);
 #endif
 	
 
@@ -221,4 +209,27 @@ void ParticleSystem::resetQuadtreeSerial()
 
 ParticleSystem::~ParticleSystem()
 {
+}
+
+cl_float4 ParticleSystem::getMinMaxSerial()
+{
+	std::pair<float2, float2> minmax;
+	minmax.first = { FLT_MAX, FLT_MAX };
+	minmax.second = { -FLT_MAX, -FLT_MAX };
+	for (auto& particle : particles_)
+	{
+		auto& min = minmax.first;
+		auto& max = minmax.second;
+
+		const auto& pos = particle.getPos();
+		if (pos.x < min.x)
+			min.x = pos.x;
+		if (pos.y < min.y)
+			min.y = pos.y;
+		if (pos.x > max.x)
+			max.x = pos.x;
+		if (pos.y > max.y)
+			max.y = pos.y;
+	}
+	return { minmax.first.x, minmax.first.y, minmax.second.x, minmax.second.y };
 }

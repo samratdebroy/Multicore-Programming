@@ -6,7 +6,7 @@
 #define SOFTENER 10000000.0f
 
 // Calculate acceleration on target_p due to force from this node's subtree on target_p
-__kernel void compute_force_from_nodes_kernel(__global float2* pos, __global float2* acc, __global float* mass, __global int* child, __global float4* min_max_extents, int num_particles)
+__kernel void compute_force_from_nodes_kernel(__global float2* pos, __global float2* acc, __global float* mass, __global int* child, __global float4* min_max_extents, const int num_particles)
 {
 	int particleID = get_global_id(0);
 	const int stride = get_global_size(0);

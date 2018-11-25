@@ -17,7 +17,6 @@ private:
 		cl_int errNumber = 0;			// Error code var
 		cl_program program;				// OpenCL program
 
-		
 	public:
 		cl_kernel kernel;				// OpenCL kernel
 		Kernel();
@@ -36,29 +35,27 @@ private:
 		}
 	};
 
-	cl_context cxMainContext;		// OpenCL context
-	cl_command_queue cqCommandQue;	// OpenCL command queue
-	cl_device_id device_id;		// OpenCL device list
-	cl_int ciErrNum = 0;			// Error code var
-	size_t szGlobalWorkSize[1];		// Global # of work items
-	size_t szLocalWorkSize[1];
+	cl_context gpuContext_;						// OpenCL context
+	cl_context cpuContext_;						// OpenCL context
+	cl_command_queue gpu_command_queue_;		// OpenCL command queue
+	cl_command_queue cpu_command_queue_;		// OpenCL command queue
+	cl_device_id gpuDeviceID_;					// OpenCL device
+	cl_device_id cpuDeviceID_;					// OpenCL device
+	cl_int errorNum_ = 0;						// Error code var
+	size_t globalWorkSize_[1];					// Global # of work items
+	size_t gpuLocalWorkSize_[1];
+	size_t cpuLocalWorkSize_[1];
+
 
 	// OpenCL memory buffer objects
 	cl_mem memPos, memVel, memAcc, memMass, memChild, memMinmax;
-	// OpenCL constants
-	cl_mem memNumNodes, memNumParticles, memTimeStep;
+	cl_mem cpu_memPos, cpu_memMass, cpu_memChild, cpu_memMinMax;
 	// OpenGL/OpenCL Interop
 	std::vector< std::unique_ptr<cl_mem>> memVBO;
 
 	// OpenCL Kernels
-	std::unique_ptr<Kernel> computeForces, integrate, resetQuadtreeFields, bruteForce, updateVBOValues;
+	std::unique_ptr<Kernel> computeForces, integrate, resetQuadtreeFields, bruteForce, updateVBOValues, minMax;
 
-	// # of Work Items in Work Group
-	size_t szParmDataBytes;
-	
-	// byte length of parameter storage
-	size_t szKernelLength;// byte Length of kernel code
-	int iTestN = 10000; // Length of demo test vectors
 	bool OpenGLInteropSupported = false;
 
 public:
@@ -69,7 +66,8 @@ public:
 	void computeForcesAndIntegrate(cl_float2* pos, cl_float2* vel, cl_float2* acc, float* mass, int* child, cl_float4* min_max_extents);
 	void computeForcesAndIntegrate(cl_float2* pos, cl_float2* vel, cl_float2* acc, float* mass);
 	void resetQuadtree(cl_float2* pos, float* mass, int* child);
-
+	void getMinMax(cl_float2* pos, cl_float4* minmax);
+	void initCPUKernels(cl_float2* pos, float* mass, int* child, cl_float4* minmax);
 	bool isOpenGLInteropSupported() { return OpenGLInteropSupported; };
 
 	OpenCLManager();
